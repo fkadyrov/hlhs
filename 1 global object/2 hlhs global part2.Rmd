@@ -1,0 +1,379 @@
+```{r}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(SeuratDisk)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+```
+
+
+#following is run on computing cluster
+```{r}
+setwd("/Farid/Farid/HLHS_2024") #syntax different
+
+
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+
+sample <- readRDS("./merged_postQC_doubletRemoval.rds")
+
+DefaultAssay(sample) <- 'RNA'
+sample <- SCTransform(sample, vars.to.regress = c("percent.mt", "nCount_RNA"))
+
+sample <- RunPCA(sample, npcs=100, verbose=TRUE)
+sample <- RunHarmony(sample, c("sample"), reduction = "pca", reduction.save = "harmony", assay.use = "SCT")
+sample <- RunUMAP(sample, reduction = "harmony", dims = 1:80, return.model = TRUE)
+sample <- FindNeighbors(sample, reduction = "harmony", dims = 1:80)
+sample <- FindClusters(sample, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = TRUE)
+
+png(filename = "./hlhs res 0_1.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(sample, reduction = 'umap', group.by = 'SCT_snn_res.0.1', label.size = 7, label=TRUE, pt.size = 1)
+dev.off()
+
+DefaultAssay(sample) <- 'SCT'
+Idents(sample) <- "SCT_snn_res.0.1"
+rna.rnamarkers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.rnamarkers, file ="./hlhs_SCT_snn_res.0.1.csv", quote = FALSE)
+
+png(filename = "./hlhs res 0_2.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(sample, reduction = 'umap', group.by = 'SCT_snn_res.0.2', label.size = 7, label=TRUE, pt.size = 1)
+dev.off()
+
+DefaultAssay(sample) <- 'SCT'
+Idents(sample) <- "SCT_snn_res.0.2"
+rna.rnamarkers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.rnamarkers, file ="./hlhs_SCT_snn_res.0.2.csv", quote = FALSE)
+
+png(filename = "./hlhs res 0_3.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(sample, reduction = 'umap', group.by = 'SCT_snn_res.0.3', label.size = 7, label=TRUE, pt.size = 1)
+dev.off()
+
+DefaultAssay(sample) <- 'SCT'
+Idents(sample) <- "SCT_snn_res.0.3"
+rna.rnamarkers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.rnamarkers, file ="./hlhs_SCT_snn_res.0.3.csv", quote = FALSE)
+
+png(filename = "./hlhs res 0_4.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(sample, reduction = 'umap', group.by = 'SCT_snn_res.0.4', label.size = 7, label=TRUE, pt.size = 1)
+dev.off()
+
+DefaultAssay(sample) <- 'SCT'
+Idents(sample) <- "SCT_snn_res.0.4"
+rna.rnamarkers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.rnamarkers, file ="./hlhs_SCT_snn_res.0.4.csv", quote = FALSE)
+
+png(filename = "./hlhs res 0_5.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(sample, reduction = 'umap', group.by = 'SCT_snn_res.0.5', label.size = 7, label=TRUE, pt.size = 1)
+dev.off()
+
+DefaultAssay(sample) <- 'SCT'
+Idents(sample) <- "SCT_snn_res.0.5"
+rna.rnamarkers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.rnamarkers, file ="./hlhs_SCT_snn_res.0.5.csv", quote = FALSE)
+
+png(filename = "./hlhs res 0_6.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(sample, reduction = 'umap', group.by = 'SCT_snn_res.0.6', label.size = 7, label=TRUE, pt.size = 1)
+dev.off()
+
+DefaultAssay(sample) <- 'SCT'
+Idents(sample) <- "SCT_snn_res.0.6"
+rna.rnamarkers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.rnamarkers, file ="./hlhs_SCT_snn_res.0.6.csv", quote = FALSE)
+
+png(filename = "./hlhs res 0_7.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(sample, reduction = 'umap', group.by = 'SCT_snn_res.0.7', label.size = 7, label=TRUE, pt.size = 1)
+dev.off()
+
+DefaultAssay(sample) <- 'SCT'
+Idents(sample) <- "SCT_snn_res.0.7"
+rna.rnamarkers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.rnamarkers, file ="./hlhs_SCT_snn_res.0.7.csv", quote = FALSE)
+
+png(filename = "./hlhs res 0_8.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(sample, reduction = 'umap', group.by = 'SCT_snn_res.0.8', label.size = 7, label=TRUE, pt.size = 1)
+dev.off()
+
+DefaultAssay(sample) <- 'SCT'
+Idents(sample) <- "SCT_snn_res.0.8"
+rna.rnamarkers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.rnamarkers, file ="./hlhs_SCT_snn_res.0.8.csv", quote = FALSE)
+
+png(filename = "./hlhs res 0_9.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(sample, reduction = 'umap', group.by = 'SCT_snn_res.0.9', label.size = 7, label=TRUE, pt.size = 1)
+dev.off()
+
+DefaultAssay(sample) <- 'SCT'
+Idents(sample) <- "SCT_snn_res.0.9"
+rna.rnamarkers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.rnamarkers, file ="./hlhs_SCT_snn_res.0.9.csv", quote = FALSE)
+
+saveRDS(sample, "./HLHS_normalized.rds")
+```
+
+
+#POST computing cluster
+
+```{r}
+sample <- readRDS("D:/HLHS/2024 final version/1 global object/ris computing services/HLHS_normalized.rds")
+```
+
+```{r}
+DimPlot(sample, group.by = "SCT_snn_res.0.5", label = TRUE)
+
+DimPlot(sample, group.by = "SCT_snn_res.0.6", label = TRUE)
+
+DimPlot(sample, group.by = "SCT_snn_res.0.7", label = TRUE)
+
+DimPlot(sample, group.by = "SCT_snn_res.0.8", label = TRUE)
+```
+
+```{r}
+#cardiomyocyte
+FeaturePlot(sample, features = "RYR2")
+FeaturePlot(sample, features = "TNNT2")
+#endothelium
+FeaturePlot(sample, features = "PECAM1")
+FeaturePlot(sample, features = "VWF")
+#endocardium
+FeaturePlot(sample, features = "CDH11")
+FeaturePlot(sample, features = "NPR3")
+FeaturePlot(sample, features = "LEPR")
+FeaturePlot(sample, features = "NFATC1")
+#fibroblasts
+FeaturePlot(sample, features = "DCN")
+#myeloid
+FeaturePlot(sample, features = "ITGAM")
+FeaturePlot(sample, features = "C1QC")
+FeaturePlot(sample, features = "F13A1")
+#epicardium
+FeaturePlot(sample, features = "WT1")
+#neuron
+FeaturePlot(sample, features = "NRXN1")
+#lymphatics
+FeaturePlot(sample, features = "CCL21")
+#proliferating
+FeaturePlot(sample, features = "MKI67")
+#smc
+FeaturePlot(sample, features = "ACTA2")
+#pericyte
+FeaturePlot(sample, features = "KCNJ8")
+#bcell
+FeaturePlot(sample, features = "MS4A1")
+#junk
+FeaturePlot(sample, features = "percent.mt")
+```
+
+# Annotate the Global Clusters
+```{r}
+fun <- function(x) {
+  if (x == "0") {"cardiomyocyte"} 
+  else if (x == "1") {"fibroblast"}
+  else if (x == "2") {"endothelium"}
+  else if (x == "3") {"myeloid"}
+  else if (x == "4") {"pericyte"}
+  else if (x == "5") {"endocardium"}
+  else if (x == "6") {"endothelium"}
+  else if (x == "7") {"tcells"}
+  else if (x == "8") {"endothelium"}
+  else if (x == "9") {"fibroblast"}
+  else if (x == "10") {"cardiomyocyte"}
+  else if (x == "11") {"smc"}
+  else if (x == "12") {"lymphatic"}
+  else if (x == "13") {"myeloid"}
+  else if (x == "14") {"fibroblast"}
+  else if (x == "15") {"endothelium"}
+  else if (x == "16") {"adipocyte"}
+  else if (x == "17") {"fibroblast"}
+  else if (x == "18") {"neuron"}
+  else if (x == "19") {"endothelium"}
+  else if (x == "20") {"cardiomyocyte"}
+  else if (x == "21") {"bcell"}
+  else if (x == "22") {"endothelium"}
+  else if (x == "23") {"mast"}
+  else if (x == "24") {"cardiomyocyte"}
+  else if (x == "25") {"proliferating"}
+  else if (x == "26") {"pericyte"}
+  else if (x == "27") {"pericyte"}
+  else if (x == "28") {"fibroblast"}
+}
+sample$cell.type <- mapply(fun, sample$SCT_snn_res.0.5)
+```
+
+```{r}
+DimPlot(sample, reduction = 'umap', group.by = 'cell.type',label.size = 4,label = TRUE)
+```
+
+#condition annotation
+```{r}
+fun <- function(x) {
+  if (x == "P0156") {"Donor"} 
+  else if (x == "P0318") {"Donor"}
+  else if (x == "P0172") {"Donor"}
+  else if (x == "P0202") {"Donor"}
+  else if (x == "P0344") {"NF"}
+  else if (x == "P0219") {"NF"}
+  else if (x == "P0254") {"NF"}
+  else if (x == "T1126") {"NF"}
+  else if (x == "T1197") {"NF"}
+  else if (x == "P0116") {"SysHF"}
+  else if (x == "T1093") {"SysHF"}
+  else if (x == "T1007") {"SysHF"}
+  else if (x == "P0371") {"SysHF"}
+  else if (x == "T485") {"SysHF"}
+}
+
+sample$condition <- mapply(fun, sample$sample)
+```
+
+
+```{r}
+sample$condition <- factor(x = sample$condition, levels = c('Donor', 'NF', 'SysHF'))
+```
+
+```{r}
+sample$cell.type <- factor(x = sample$cell.type, levels = c('endothelium', 'fibroblast', 'cardiomyocyte', 'myeloid', 'pericyte', 'endocardium', 'tcells', 'smc', 'lymphatic', 'adipocyte', 'neuron', 'bcell', 'mast', 'proliferating'))
+```
+
+```{r}
+png(filename = "./hlhs annotation.png", width = 25, height = 20, units = "cm", res = 600)
+DimPlot(sample, reduction = 'umap', group.by = 'cell.type', label.size = 7, label = FALSE, pt.size = 1)+
+  theme(legend.text=element_text(size=10))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","orange","#b66dff","#6db6ff","yellow2","#ffb6db","#b6dbff","red", 'darkblue'))
+dev.off()
+```
+
+
+
+```{r}
+png(filename = "./hlhs annotation split.png", width = 65, height = 20, units = "cm", res = 600)
+DimPlot(sample, reduction = 'umap', group.by = 'cell.type', label.size = 7, label = FALSE, pt.size = 1, split.by = 'condition')+
+  theme(legend.text=element_text(size=10))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","orange","#b66dff","#6db6ff","yellow2","#ffb6db","#b6dbff","red", 'darkblue'))
+dev.off()
+```
+
+```{r}
+png(filename="./barplot hlhs annotated.png", width=40, height=20, units="cm", res=600)
+ggplot(sample@meta.data, aes(x = condition, fill = cell.type)) +
+  geom_bar(position = "fill", width = 0.95) +
+  xlab("Sample") +
+  ylab("Proportion") +
+  theme(legend.title = element_blank())+ coord_fixed(ratio=5)  +
+  theme(legend.text=element_text(size=25)) +
+  scale_fill_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","orange","#b66dff","#6db6ff","yellow2","#ffb6db","#b6dbff","red", 'darkblue'))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.text=element_text(size=25))+ 
+  theme(axis.text = element_text(size = 25))
+dev.off()
+```
+
+```{r}
+saveRDS(sample, "./hlhs_annotated.rds")
+sample <- readRDS("./hlhs_annotated.rds")
+```
+
+```{r}
+DimPlot(sample, group.by = "cell.type")
+```
+
+
+#subset populations of intereset for downstream analysis
+```{r}
+Idents(sample) <- "cell.type"
+
+cardiomyocyte <- subset(sample, idents = c('cardiomyocyte'))
+saveRDS(cardiomyocyte, "./hlhs_cardiomyocyte.rds")
+rm(cardiomyocyte)
+gc()
+
+endocardium <- subset(sample, idents = c('endocardium'))
+saveRDS(endocardium, "./hlhs_endocardium.rds")
+rm(endocardium)
+gc()
+
+endothelium <- subset(sample, idents = c('endothelium'))
+saveRDS(endothelium, "./hlhs_endothelium.rds")
+rm(endothelium)
+gc()
+
+fibroblast <- subset(sample, idents = c('fibroblast'))
+saveRDS(fibroblast, "./hlhs_fibroblast.rds")
+rm(fibroblast)
+gc()
+
+myeloid <- subset(sample, idents = c('myeloid', 'proliferating'))
+saveRDS(myeloid, "./hlhs_myeloid.rds")
+rm(myeloid)
+gc()
+
+smc <- subset(sample, idents = c('smc'))
+saveRDS(smc, "./hlhs_smc.rds")
+rm(smc)
+gc()
+
+pericyte <- subset(sample, idents = c('pericyte'))
+saveRDS(pericyte, "./hlhs_pericyte.rds")
+rm(pericyte)
+gc()
+
+tcells <- subset(sample, idents = c('tcells'))
+saveRDS(tcells, "./hlhs_tcells.rds")
+rm(tcells)
+gc()
+
+lymphatic <- subset(sample, idents = c('lymphatic'))
+saveRDS(lymphatic, "./hlhs_lymphatic.rds")
+rm(lymphatic)
+gc()
+
+adipocyte <- subset(sample, idents = c('adipocyte'))
+saveRDS(adipocyte, "./hlhs_adipocyte.rds")
+rm(adipocyte)
+gc()
+
+neuron <- subset(sample, idents = c('neuron'))
+saveRDS(neuron, "./hlhs_neuron.rds")
+rm(neuron)
+gc()
+
+bcell <- subset(sample, idents = c('bcell'))
+saveRDS(bcell, "./hlhs_bcell.rds")
+rm(bcell)
+gc()
+
+mast <- subset(sample, idents = c('mast'))
+saveRDS(mast, "./hlhs_mast.rds")
+rm(mast)
+gc()
+```
+
+```{r}
+#endocardium
+FeaturePlot(sample, features = "CDH11")
+FeaturePlot(sample, features = "NPR3")
+FeaturePlot(sample, features = "LEPR")
+FeaturePlot(sample, features = "NFATC1")
+```
+
+```{r}
+png(filename="./hlhs annotated.png", width=20, height=20, units="cm", res=600)
+DimPlot(sample, group.by = "cell.type", label = TRUE)
+dev.off()
+
+png(filename="./hlhs endocardium markers.png", width=20, height=20, units="cm", res=600)
+FeaturePlot(sample, features = c("CDH11", "NPR3", "LEPR", "NFATC1"))
+dev.off()
+```
+
+
+
+
+
