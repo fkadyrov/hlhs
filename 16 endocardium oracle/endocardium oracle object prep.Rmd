@@ -1,0 +1,145 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(DESeq2)
+library(SingleCellExperiment)
+library(Matrix.utils)
+library(EnhancedVolcano)
+library(enrichR)
+library(tidyverse)
+library(SeuratDisk)
+```
+
+#working directory
+```{r}
+setwd("/media/farid-kadyrov/Seagate Portable Drive/HLHS/2024 final version/19 endocardium oracle")
+```
+
+```{r}
+endocardium <- readRDS("/media/farid-kadyrov/Seagate Portable Drive/HLHS/2024 final version/5 hlhs cleaning/2 endocardium/hlhs_subset_cleaned_annotated.rds")
+
+
+```
+
+```{r}
+DimPlot(endocardium, reduction = "umap", group.by = "annotation", split.by = "condition")
+```
+
+```{r}
+DefaultAssay(endocardium) <- 'SCT'
+endocardium
+```
+
+```{r}
+FeaturePlot(endocardium, features = "SMAD4")
+```
+
+#export h5ad file for scanpy processing
+```{r}
+library(MuDataSeurat)
+```
+
+```{r}
+seu = DietSeurat(
+  endocardium,
+  counts = TRUE, # so, raw counts save to adata.layers['counts']
+  data = TRUE, # so, log1p counts save to adata.X when scale.data = False, else adata.layers['data']
+  scale.data = FALSE, # set to false
+  features = rownames(endocardium), # export all genes, not just top highly variable genes
+  assays = "SCT",
+  dimreducs = c("pca","umap"),
+  graphs = c("SCT_nn", "SCT_snn"), # to RNA_nn -> distances, RNA_snn -> connectivities
+  misc = TRUE
+)
+```
+
+
+```{r}
+MuDataSeurat::WriteH5AD(seu, "endocardium.h5ad", assay="SCT")
+```
+
+
+#starting cell selection based on donor z score
+```{r}
+donor_hlhs<-read.table("/media/farid-kadyrov/Seagate Portable Drive/HLHS/2024 final version/7 hlhs sc dex/2 cardiomyocyte censoring/endocardium/donor_hlhs_intersection_censored.tsv")
+```
+
+```{r}
+donorsig <- donor_hlhs[donor_hlhs$avg_log2FC > 0,]
+donorsig <- donorsig[order(donorsig$avg_log2FC, decreasing = TRUE),]
+#donorsig <- head(donorsig, 10)
+donorsig <- as.vector(donorsig$X)
+```
+
+
+```{r}
+#selecting monocyte based on monocyte z score
+
+DefaultAssay(endocardium) <- "SCT"
+expdata <- GetAssayData(endocardium)
+zDonor <- c(donorsig)
+pops<-list(zDonor)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+  genes <- pops[[i]]
+  zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+  av <- numeric(ncol(expdata))
+  
+  geneExp <- as.matrix(expdata[zz, ])
+  geneExp <- t(scale(t(geneExp)))
+  geneExp[is.nan(geneExp)] <- 0
+  z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+endocardium@meta.data$Donor_z<-z_scores[1,]
+
+DotPlot(endocardium, features = "Donor_z", group.by = "condition")
+```
+
+```{r}
+
+Donor_z_cells<- FetchData(endocardium, vars = "Donor_z") 
+
+#AAGACCTCACTGTGTA-1_7
+```
+
+```{r}
+#start cell
+
+DimPlot(endocardium, reduction = "umap", pt.size = 3, label = FALSE,
+        cells.highlight = "AAGACCTCACTGTGTA-1_7", cols.highlight = "red", cols = "gray", sizes.highlight = 3, order = TRUE)
+
+DimPlot(endocardium, reduction = "umap", pt.size = 3, label = FALSE,
+        cells.highlight = "AAGACCTCACTGTGTA-1_7", cols.highlight = "red", cols = "gray", sizes.highlight = 3, order = TRUE, split.by = "annotation")
+
+DimPlot(endocardium, reduction = "umap", pt.size = 3, label = FALSE,
+        cells.highlight = "AAGACCTCACTGTGTA-1_7", cols.highlight = "red", cols = "gray", sizes.highlight = 3, order = TRUE, split.by = "condition")
+
+#starting cell is in donor condition, has highest donor z score, and is in endoc2 which is overrepresented in donor
+```
+
+
+
+
+
+
+
+
