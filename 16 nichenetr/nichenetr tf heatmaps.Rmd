@@ -1,0 +1,178 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(DESeq2)
+library(SingleCellExperiment)
+library(Matrix.utils)
+library(EnhancedVolcano)
+library(enrichR)
+library(tidyverse)
+```
+
+#working directory
+```{r}
+setwd("D:/HLHS/2024 final version/30 nichenetr tf heatmaps")
+```
+
+```{r}
+endocardium <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/2 endocardium/hlhs_subset_cleaned_annotated.rds")
+DimPlot(endocardium, reduction = "umap", group.by = "annotation")
+```
+
+```{r}
+fibroblast <- readRDS("D:/HLHS/2024 final version/13 fibroblast further analysis and mapping/1 fibroblast further analysis/fibroblast_manual.rds")
+DimPlot(fibroblast, group.by = "manual")
+```
+
+#nf endo to fib
+```{r}
+NF_endo_fib <- c('STAT3', 'EPAS1', 'STAT3', 'TP53', 'SOD2', 'TP53', 'STAT1', 'STAT3', 'CTNNB1', 'STAT3', 'MYC', 'TP53', 'THBS1')
+
+NF_endo_fib <- unique(NF_endo_fib)
+```
+
+```{r}
+#plotting on heatmap
+
+#average across cell per condition
+
+Idents(fibroblast) <- "condition"
+
+signatures_avg <- AverageExpression(fibroblast, assays = "SCT",
+                                           features = NF_endo_fib, return.seurat = T)
+signatures_avg <- GetAssayData(signatures_avg, assay = "SCT")
+signatures_avg_1 <- signatures_avg[, c("Donor", "NF", "SysHF")]
+
+pdf("nf endo to fib tfs targets.pdf", width=20/2.54, height=20/2.54)
+pheatmap(signatures_avg_1, scale = "row", cluster_rows = F, cluster_cols = F,
+         color= plasma(100))
+dev.off()
+```
+
+#syshf endo to fib
+```{r}
+SysHF_endo_fib <- c('JUN', 'GLI2', 'MYC', 'POSTN', 'NFKB1', 'JUN', 'STAT3', 'COL1A2')
+
+SysHF_endo_fib <- unique(SysHF_endo_fib)
+```
+
+```{r}
+#plotting on heatmap
+
+#average across cell per condition
+
+Idents(fibroblast) <- "condition"
+
+signatures_avg <- AverageExpression(fibroblast, assays = "SCT",
+                                           features = SysHF_endo_fib, return.seurat = T)
+signatures_avg <- GetAssayData(signatures_avg, assay = "SCT")
+signatures_avg_1 <- signatures_avg[, c("Donor", "NF", "SysHF")]
+
+pdf("syshf endo to fib tfs targets.pdf", width=20/2.54, height=20/2.54)
+pheatmap(signatures_avg_1, scale = "row", cluster_rows = F, cluster_cols = F,
+         color= plasma(100))
+dev.off()
+```
+
+#nf endo to endo
+```{r}
+NF_endo_endo <- c('TP53', 'DDIT4', 'TP53', 'STAT3', 'DUSP5', 'TP53', 'STAT3', 'NDRG1', 'STAT3', 'EPAS1', 'ESR1', 'CYP1B1')
+
+NF_endo_endo <- unique(NF_endo_endo)
+```
+
+```{r}
+#plotting on heatmap
+
+#average across cell per condition
+
+Idents(endocardium) <- "condition"
+
+signatures_avg <- AverageExpression(endocardium, assays = "SCT",
+                                           features = NF_endo_endo, return.seurat = T)
+signatures_avg <- GetAssayData(signatures_avg, assay = "SCT")
+signatures_avg_1 <- signatures_avg[, c("Donor", "NF", "SysHF")]
+
+pdf("nf endo to endo tfs targets.pdf", width=20/2.54, height=20/2.54)
+pheatmap(signatures_avg_1, scale = "row", cluster_rows = F, cluster_cols = F,
+         color= plasma(100))
+dev.off()
+```
+
+#syshf endo to endo nrg3 signaling
+```{r}
+syshf_endo_endo <- c('ESR1', 'CTNNB1', 'MYC', 'TP53', 'SERPINE1', 'TP53', 'ESR1', 'STAT3', 'FOS', 'STAT3', 'CCND3')
+
+syshf_endo_endo <- unique(syshf_endo_endo)
+```
+
+```{r}
+#plotting on heatmap
+
+#average across cell per condition
+
+Idents(endocardium) <- "condition"
+
+signatures_avg <- AverageExpression(endocardium, assays = "SCT",
+                                           features = syshf_endo_endo, return.seurat = T)
+signatures_avg <- GetAssayData(signatures_avg, assay = "SCT")
+signatures_avg_1 <- signatures_avg[, c("Donor", "NF", "SysHF")]
+
+pdf("syshf endo to endo NRG3 tfs targets.pdf", width=20/2.54, height=20/2.54)
+pheatmap(signatures_avg_1, scale = "row", cluster_rows = F, cluster_cols = F,
+         color= plasma(100))
+dev.off()
+```
+
+#syshf endo to endo ccn2 signaling
+```{r}
+syshf_endo_endo <- c('TP53', 'ESR1', 'ETS1', 'JUN', 'FOS', 'JUN', 'SMAD4', 'SMAD3', 'SERPINE1')
+
+syshf_endo_endo <- unique(syshf_endo_endo)
+```
+
+```{r}
+#plotting on heatmap
+
+#average across cell per condition
+
+Idents(endocardium) <- "condition"
+
+signatures_avg <- AverageExpression(endocardium, assays = "SCT",
+                                           features = syshf_endo_endo, return.seurat = T)
+signatures_avg <- GetAssayData(signatures_avg, assay = "SCT")
+signatures_avg_1 <- signatures_avg[, c("Donor", "NF", "SysHF")]
+
+pdf("syshf endo to endo CCN2 tfs targets.pdf", width=20/2.54, height=20/2.54)
+pheatmap(signatures_avg_1, scale = "row", cluster_rows = F, cluster_cols = F,
+         color= plasma(100))
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
