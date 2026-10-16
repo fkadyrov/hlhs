@@ -1,0 +1,590 @@
+```{r}
+library(nichenetr) 
+library(Seurat)
+library(SeuratObject)
+library(tidyverse)
+library(DiagrammeRsvg)
+```
+
+```{r}
+setwd("E:/HLHS/2024 final version/22 nichenetr focused/nichenetr_endocardium/SysHF")
+```
+
+```{r}
+merged <- readRDS("E:/HLHS/2024 final version/6 hlhs clean global object/HLHS_cleaned_normalized_annotated.rds")
+DimPlot(merged, group.by = "global.type", split.by = "condition")
+DimPlot(merged, group.by = "annotation")
+```
+
+```{r}
+organism <- "human"
+
+if(organism == "human"){
+  lr_network <- readRDS(url("https://zenodo.org/record/7074291/files/lr_network_human_21122021.rds"))
+  ligand_target_matrix <- readRDS(url("https://zenodo.org/record/7074291/files/ligand_target_matrix_nsga2r_final.rds"))
+  weighted_networks <- readRDS(url("https://zenodo.org/record/7074291/files/weighted_networks_nsga2r_final.rds"))
+} else if(organism == "mouse"){
+  lr_network <- readRDS(url("https://zenodo.org/record/7074291/files/lr_network_mouse_21122021.rds"))
+  ligand_target_matrix <- readRDS(url("https://zenodo.org/record/7074291/files/ligand_target_matrix_nsga2r_final_mouse.rds"))
+  weighted_networks <- readRDS(url("https://zenodo.org/record/7074291/files/weighted_networks_nsga2r_final_mouse.rds"))
+
+}
+
+lr_network <- lr_network %>% distinct(from, to)
+head(lr_network)
+
+ligand_target_matrix[1:5,1:5] # target genes in rows, ligands in columns
+
+head(weighted_networks$lr_sig) # interactions and their weights in the ligand-receptor + signaling network
+
+head(weighted_networks$gr) # interactions and their weights in the gene regulatory network
+
+```
+
+```{r}
+merged <- SetIdent(merged, value = merged@meta.data$global.type)
+```
+
+```{r}
+receiver = "endocardium"
+expressed_genes_receiver <- get_expressed_genes(receiver, merged, pct = 0.05)
+```
+
+```{r}
+all_receptors <- unique(lr_network$to)  
+expressed_receptors <- intersect(all_receptors, expressed_genes_receiver)
+
+potential_ligands <- lr_network %>% filter(to %in% expressed_receptors) %>% pull(from) %>% unique()
+```
+
+#define a set of potential ligands for both the sender-agnostic and sender-focused approach
+```{r}
+sender_celltypes <- c("endocardium")
+
+# Use lapply to get the expressed genes of every sender cell type separately here
+list_expressed_genes_sender <- sender_celltypes %>% unique() %>% lapply(get_expressed_genes, merged, 0.05)
+expressed_genes_sender <- list_expressed_genes_sender %>% unlist() %>% unique()
+
+potential_ligands_focused <- intersect(potential_ligands, expressed_genes_sender) 
+
+# Also check 
+length(expressed_genes_sender)
+
+length(potential_ligands)
+
+length(potential_ligands_focused)
+
+```
+
+#define the geneset of interest
+```{r}
+condition_oi <-  "SysHF"
+condition_reference <- "NF"
+
+seurat_obj_receiver <- subset(merged, idents = receiver)
+
+#changed min pct to 0.1
+DE_table_receiver <-  FindMarkers(object = seurat_obj_receiver,
+                                  ident.1 = condition_oi, ident.2 = condition_reference,
+                                  group.by = "condition",
+                                  min.pct = 0.1) %>% rownames_to_column("gene")
+
+#changed logFC to 0.4
+#removed abs to focus on condition of interest
+#geneset_oi <- DE_table_receiver %>% filter(p_val_adj <= 0.05 & abs(avg_log2FC) >= 0.4) %>% pull(gene)
+geneset_oi <- DE_table_receiver %>% filter(p_val_adj <= 0.05 & avg_log2FC >= 0.4) %>% pull(gene)
+geneset_oi <- geneset_oi %>% .[. %in% rownames(ligand_target_matrix)]
+```
+
+#define the background genes
+# important to check that the number of background genes is a ‘reasonable’ number, generally between 5000-10000, and sufficiently larger than our gene set of interest.
+```{r}
+background_expressed_genes <- expressed_genes_receiver %>% .[. %in% rownames(ligand_target_matrix)]
+
+length(background_expressed_genes)
+
+length(geneset_oi)
+```
+
+#perform nichenet ligand activity analysis
+#interest cutoff at auroc of 0.5
+# area under precision recall curve
+```{r}
+ligand_activities <- predict_ligand_activities(geneset = geneset_oi,
+                                               background_expressed_genes = background_expressed_genes,
+                                               ligand_target_matrix = ligand_target_matrix,
+                                               potential_ligands = potential_ligands)
+
+ligand_activities <- ligand_activities %>% arrange(-aupr_corrected) %>% mutate(rank = rank(desc(aupr_corrected)))
+ligand_activities
+```
+
+```{r}
+p_hist_lig_activity <- ggplot(ligand_activities, aes(x=aupr_corrected)) + 
+  geom_histogram(color="black", fill="darkorange")  + 
+  geom_vline(aes(xintercept=min(ligand_activities %>% top_n(30, aupr_corrected) %>% pull(aupr_corrected))),
+             color="red", linetype="dashed", size=1) + 
+  labs(x="ligand activity (PCC)", y = "# ligands") +
+  theme_classic()
+
+p_hist_lig_activity
+```
+
+```{r}
+best_upstream_ligands <- ligand_activities %>% top_n(30, aupr_corrected) %>% arrange(-aupr_corrected) %>% pull(test_ligand)
+```
+
+```{r}
+vis_ligand_aupr <- ligand_activities %>% filter(test_ligand %in% best_upstream_ligands) %>%
+  column_to_rownames("test_ligand") %>% select(aupr_corrected) %>% arrange(aupr_corrected) %>% as.matrix(ncol = 1)
+
+(make_heatmap_ggplot(vis_ligand_aupr,
+                     "Prioritized ligands", "Ligand activity", 
+                     legend_title = "AUPR", color = "darkorange") + 
+    theme(axis.text.x.top = element_blank()))  
+```
+
+#infer target genes and receptors of top-ranked ligand
+```{r}
+active_ligand_target_links_df <- best_upstream_ligands %>%
+  lapply(get_weighted_ligand_target_links,
+         geneset = geneset_oi,
+         ligand_target_matrix = ligand_target_matrix,
+         n = 100) %>%
+  bind_rows() %>% drop_na()
+
+nrow(active_ligand_target_links_df)
+head(active_ligand_target_links_df)
+```
+
+```{r}
+active_ligand_target_links <- prepare_ligand_target_visualization(
+  ligand_target_df = active_ligand_target_links_df,
+  ligand_target_matrix = ligand_target_matrix,
+  cutoff = 0.33) 
+
+nrow(active_ligand_target_links)
+
+head(active_ligand_target_links)
+```
+
+```{r}
+order_ligands <- intersect(best_upstream_ligands, colnames(active_ligand_target_links)) %>% rev()
+order_targets <- active_ligand_target_links_df$target %>% unique() %>% intersect(rownames(active_ligand_target_links))
+
+vis_ligand_target <- t(active_ligand_target_links[order_targets,order_ligands])
+
+png(filename="./outs heatmap.png", width=14, height=10, units="cm", res=300)
+make_heatmap_ggplot(vis_ligand_target, "Prioritized ligands", "Predicted target genes",
+                    color = "purple", legend_title = "Regulatory potential") +
+  scale_fill_gradient2(low = "whitesmoke",  high = "purple")
+dev.off()
+
+```
+
+#receptor of top ranked ligands
+```{r}
+ligand_receptor_links_df <- get_weighted_ligand_receptor_links(
+  best_upstream_ligands, expressed_receptors,
+  lr_network, weighted_networks$lr_sig) 
+```
+
+```{r}
+vis_ligand_receptor_network <- prepare_ligand_receptor_visualization(
+  ligand_receptor_links_df,
+  best_upstream_ligands,
+  order_hclust = "both") 
+
+png(filename="./outs heatmap receptors.png", width=16, height=12, units="cm", res=300)
+(make_heatmap_ggplot(t(vis_ligand_receptor_network), 
+                     y_name = "Ligands", x_name = "Receptors",  
+                     color = "mediumvioletred", legend_title = "Prior interaction potential"))
+dev.off()
+```
+
+#sender focused approach
+```{r}
+ligand_activities_all <- ligand_activities 
+best_upstream_ligands_all <- best_upstream_ligands
+
+ligand_activities <- ligand_activities %>% filter(test_ligand %in% potential_ligands_focused)
+best_upstream_ligands <- ligand_activities %>% top_n(30, aupr_corrected) %>% arrange(-aupr_corrected) %>%
+  pull(test_ligand) %>% unique()
+```
+
+```{r}
+ligand_aupr_matrix <- ligand_activities %>% filter(test_ligand %in% best_upstream_ligands) %>%
+  column_to_rownames("test_ligand") %>% select(aupr_corrected) %>% arrange(aupr_corrected)
+vis_ligand_aupr <- as.matrix(ligand_aupr_matrix, ncol = 1) 
+
+p_ligand_aupr <- make_heatmap_ggplot(vis_ligand_aupr,
+                     "Prioritized ligands", "Ligand activity", 
+                     legend_title = "AUPR", color = "darkorange") + 
+    theme(axis.text.x.top = element_blank())
+
+p_ligand_aupr
+```
+
+```{r}
+# Target gene plot
+active_ligand_target_links_df <- best_upstream_ligands %>%
+  lapply(get_weighted_ligand_target_links,
+         geneset = geneset_oi,
+         ligand_target_matrix = ligand_target_matrix,
+         n = 100) %>%
+  bind_rows() %>% drop_na()
+
+active_ligand_target_links <- prepare_ligand_target_visualization(
+  ligand_target_df = active_ligand_target_links_df,
+  ligand_target_matrix = ligand_target_matrix,
+  cutoff = 0.33) 
+
+order_ligands <- intersect(best_upstream_ligands, colnames(active_ligand_target_links)) %>% rev()
+order_targets <- active_ligand_target_links_df$target %>% unique() %>% intersect(rownames(active_ligand_target_links))
+
+vis_ligand_target <- t(active_ligand_target_links[order_targets,order_ligands])
+
+p_ligand_target <- make_heatmap_ggplot(vis_ligand_target, "Prioritized ligands", "Predicted target genes",
+                    color = "purple", legend_title = "Regulatory potential") +
+  scale_fill_gradient2(low = "whitesmoke",  high = "purple")
+
+png(filename="./outs heatmap sender approach.png", width=12, height=10, units="cm", res=300)
+p_ligand_target
+dev.off()
+```
+
+```{r}
+# Receptor plot
+ligand_receptor_links_df <- get_weighted_ligand_receptor_links(
+  best_upstream_ligands, expressed_receptors,
+  lr_network, weighted_networks$lr_sig) 
+
+vis_ligand_receptor_network <- prepare_ligand_receptor_visualization(
+  ligand_receptor_links_df,
+  best_upstream_ligands,
+  order_hclust = "both") 
+
+p_ligand_receptor <- make_heatmap_ggplot(t(vis_ligand_receptor_network), 
+                     y_name = "Ligands", x_name = "Receptors",  
+                     color = "mediumvioletred", legend_title = "Prior interaction potential")
+
+png(filename="./outs heatmap receptors sender approach.png", width=18, height=14, units="cm", res=300)
+p_ligand_receptor
+dev.off()
+```
+
+```{r}
+best_upstream_ligands_all %in% rownames(merged) %>% table()
+```
+
+```{r}
+(make_line_plot(ligand_activities = ligand_activities_all,
+                potential_ligands = potential_ligands_focused) +
+   theme(plot.title = element_text(size=11, hjust=0.1, margin=margin(0, 0, -5, 0))))
+```
+
+```{r}
+write.csv(active_ligand_target_links_df, "endocardium_ligand_to_endocardium_SysHF.csv", row.names = FALSE)
+```
+
+
+#inferring ligand-to-target signaling paths
+```{r}
+weighted_networks <- readRDS(url("https://zenodo.org/record/7074291/files/weighted_networks_nsga2r_final.rds"))
+ligand_tf_matrix <- readRDS(url("https://zenodo.org/record/7074291/files/ligand_tf_matrix_nsga2r_final.rds"))
+
+lr_network <- readRDS(url("https://zenodo.org/record/7074291/files/lr_network_human_21122021.rds"))
+sig_network <- readRDS(url("https://zenodo.org/record/7074291/files/signaling_network_human_21122021.rds"))
+gr_network <- readRDS(url("https://zenodo.org/record/7074291/files/gr_network_human_21122021.rds"))
+```
+
+```{r}
+ligands_oi <- c("CCN2")
+targets_oi <- c("SERPINE1")
+```
+
+```{r}
+active_signaling_network <- get_ligand_signaling_path(ligands_all = ligands_oi,
+                                                      targets_all = targets_oi,
+                                                      weighted_networks = weighted_networks,
+                                                      ligand_tf_matrix = ligand_tf_matrix,
+                                                      top_n_regulators = 4,
+                                                      minmax_scaling = TRUE) 
+
+
+graph_min_max <- diagrammer_format_signaling_graph(signaling_graph_list = active_signaling_network,
+                                                   ligands_all = ligands_oi, targets_all = targets_oi,
+                                                   sig_color = "indianred", gr_color = "steelblue")
+
+# To render the graph in RStudio Viewer, uncomment following line of code
+png(filename="./ligand ccn2 target serpine1.png", width=18, height=14, units="cm", res=300)
+DiagrammeR::render_graph(graph_min_max, layout = "tree")
+
+# To export/draw the svg, you need to install DiagrammeRsvg
+graph_svg <- DiagrammeRsvg::export_svg(DiagrammeR::render_graph(graph_min_max, layout = "tree", output = "graph"))
+cowplot::ggdraw() + cowplot::draw_image(charToRaw(graph_svg))
+dev.off()
+```
+
+```{r}
+ligands_oi <- c("CCN2")
+targets_oi <- c("FOS")
+```
+
+```{r}
+active_signaling_network <- get_ligand_signaling_path(ligands_all = ligands_oi,
+                                                      targets_all = targets_oi,
+                                                      weighted_networks = weighted_networks,
+                                                      ligand_tf_matrix = ligand_tf_matrix,
+                                                      top_n_regulators = 4,
+                                                      minmax_scaling = TRUE) 
+
+
+graph_min_max <- diagrammer_format_signaling_graph(signaling_graph_list = active_signaling_network,
+                                                   ligands_all = ligands_oi, targets_all = targets_oi,
+                                                   sig_color = "indianred", gr_color = "steelblue")
+
+# To render the graph in RStudio Viewer, uncomment following line of code
+png(filename="./ligand ccn2 target fos.png", width=18, height=14, units="cm", res=300)
+DiagrammeR::render_graph(graph_min_max, layout = "tree")
+
+# To export/draw the svg, you need to install DiagrammeRsvg
+graph_svg <- DiagrammeRsvg::export_svg(DiagrammeR::render_graph(graph_min_max, layout = "tree", output = "graph"))
+cowplot::ggdraw() + cowplot::draw_image(charToRaw(graph_svg))
+dev.off()
+```
+
+```{r}
+ligands_oi <- c("CCN2")
+targets_oi <- c("EDN1")
+```
+
+```{r}
+active_signaling_network <- get_ligand_signaling_path(ligands_all = ligands_oi,
+                                                      targets_all = targets_oi,
+                                                      weighted_networks = weighted_networks,
+                                                      ligand_tf_matrix = ligand_tf_matrix,
+                                                      top_n_regulators = 4,
+                                                      minmax_scaling = TRUE) 
+
+
+graph_min_max <- diagrammer_format_signaling_graph(signaling_graph_list = active_signaling_network,
+                                                   ligands_all = ligands_oi, targets_all = targets_oi,
+                                                   sig_color = "indianred", gr_color = "steelblue")
+
+# To render the graph in RStudio Viewer, uncomment following line of code
+png(filename="./ligand ccn2 target edn1.png", width=18, height=14, units="cm", res=300)
+DiagrammeR::render_graph(graph_min_max, layout = "tree")
+
+# To export/draw the svg, you need to install DiagrammeRsvg
+graph_svg <- DiagrammeRsvg::export_svg(DiagrammeR::render_graph(graph_min_max, layout = "tree", output = "graph"))
+cowplot::ggdraw() + cowplot::draw_image(charToRaw(graph_svg))
+dev.off()
+```
+
+```{r}
+ligands_oi <- c("CCN2")
+targets_oi <- c("CCN2")
+```
+
+```{r}
+active_signaling_network <- get_ligand_signaling_path(ligands_all = ligands_oi,
+                                                      targets_all = targets_oi,
+                                                      weighted_networks = weighted_networks,
+                                                      ligand_tf_matrix = ligand_tf_matrix,
+                                                      top_n_regulators = 4,
+                                                      minmax_scaling = TRUE) 
+
+
+graph_min_max <- diagrammer_format_signaling_graph(signaling_graph_list = active_signaling_network,
+                                                   ligands_all = ligands_oi, targets_all = targets_oi,
+                                                   sig_color = "indianred", gr_color = "steelblue")
+
+# To render the graph in RStudio Viewer, uncomment following line of code
+png(filename="./ligand ccn2 target ccn2.png", width=18, height=14, units="cm", res=300)
+DiagrammeR::render_graph(graph_min_max, layout = "tree")
+
+# To export/draw the svg, you need to install DiagrammeRsvg
+graph_svg <- DiagrammeRsvg::export_svg(DiagrammeR::render_graph(graph_min_max, layout = "tree", output = "graph"))
+cowplot::ggdraw() + cowplot::draw_image(charToRaw(graph_svg))
+dev.off()
+```
+
+```{r}
+ligands_oi <- c("FGF2")
+targets_oi <- c("FOS")
+```
+
+```{r}
+active_signaling_network <- get_ligand_signaling_path(ligands_all = ligands_oi,
+                                                      targets_all = targets_oi,
+                                                      weighted_networks = weighted_networks,
+                                                      ligand_tf_matrix = ligand_tf_matrix,
+                                                      top_n_regulators = 4,
+                                                      minmax_scaling = TRUE) 
+
+
+graph_min_max <- diagrammer_format_signaling_graph(signaling_graph_list = active_signaling_network,
+                                                   ligands_all = ligands_oi, targets_all = targets_oi,
+                                                   sig_color = "indianred", gr_color = "steelblue")
+
+# To render the graph in RStudio Viewer, uncomment following line of code
+png(filename="./ligand fgf2 target fos.png", width=18, height=14, units="cm", res=300)
+DiagrammeR::render_graph(graph_min_max, layout = "tree")
+
+# To export/draw the svg, you need to install DiagrammeRsvg
+graph_svg <- DiagrammeRsvg::export_svg(DiagrammeR::render_graph(graph_min_max, layout = "tree", output = "graph"))
+cowplot::ggdraw() + cowplot::draw_image(charToRaw(graph_svg))
+dev.off()
+```
+
+```{r}
+ligands_oi <- c("NRG3")
+targets_oi <- c("SERPINE1")
+```
+
+```{r}
+active_signaling_network <- get_ligand_signaling_path(ligands_all = ligands_oi,
+                                                      targets_all = targets_oi,
+                                                      weighted_networks = weighted_networks,
+                                                      ligand_tf_matrix = ligand_tf_matrix,
+                                                      top_n_regulators = 4,
+                                                      minmax_scaling = TRUE) 
+
+
+graph_min_max <- diagrammer_format_signaling_graph(signaling_graph_list = active_signaling_network,
+                                                   ligands_all = ligands_oi, targets_all = targets_oi,
+                                                   sig_color = "indianred", gr_color = "steelblue")
+
+# To render the graph in RStudio Viewer, uncomment following line of code
+png(filename="./ligand nrg3 target serpine1.png", width=18, height=14, units="cm", res=300)
+DiagrammeR::render_graph(graph_min_max, layout = "tree")
+
+# To export/draw the svg, you need to install DiagrammeRsvg
+graph_svg <- DiagrammeRsvg::export_svg(DiagrammeR::render_graph(graph_min_max, layout = "tree", output = "graph"))
+cowplot::ggdraw() + cowplot::draw_image(charToRaw(graph_svg))
+dev.off()
+```
+
+```{r}
+ligands_oi <- c("NRG3")
+targets_oi <- c("FOS")
+```
+
+```{r}
+active_signaling_network <- get_ligand_signaling_path(ligands_all = ligands_oi,
+                                                      targets_all = targets_oi,
+                                                      weighted_networks = weighted_networks,
+                                                      ligand_tf_matrix = ligand_tf_matrix,
+                                                      top_n_regulators = 4,
+                                                      minmax_scaling = TRUE) 
+
+
+graph_min_max <- diagrammer_format_signaling_graph(signaling_graph_list = active_signaling_network,
+                                                   ligands_all = ligands_oi, targets_all = targets_oi,
+                                                   sig_color = "indianred", gr_color = "steelblue")
+
+# To render the graph in RStudio Viewer, uncomment following line of code
+png(filename="./ligand nrg3 target fos.png", width=18, height=14, units="cm", res=300)
+DiagrammeR::render_graph(graph_min_max, layout = "tree")
+
+# To export/draw the svg, you need to install DiagrammeRsvg
+graph_svg <- DiagrammeRsvg::export_svg(DiagrammeR::render_graph(graph_min_max, layout = "tree", output = "graph"))
+cowplot::ggdraw() + cowplot::draw_image(charToRaw(graph_svg))
+dev.off()
+```
+
+```{r}
+ligands_oi <- c("NRG3")
+targets_oi <- c("CCND3")
+```
+
+```{r}
+active_signaling_network <- get_ligand_signaling_path(ligands_all = ligands_oi,
+                                                      targets_all = targets_oi,
+                                                      weighted_networks = weighted_networks,
+                                                      ligand_tf_matrix = ligand_tf_matrix,
+                                                      top_n_regulators = 4,
+                                                      minmax_scaling = TRUE) 
+
+
+graph_min_max <- diagrammer_format_signaling_graph(signaling_graph_list = active_signaling_network,
+                                                   ligands_all = ligands_oi, targets_all = targets_oi,
+                                                   sig_color = "indianred", gr_color = "steelblue")
+
+# To render the graph in RStudio Viewer, uncomment following line of code
+png(filename="./ligand nrg3 target ccnd3.png", width=18, height=14, units="cm", res=300)
+DiagrammeR::render_graph(graph_min_max, layout = "tree")
+
+# To export/draw the svg, you need to install DiagrammeRsvg
+graph_svg <- DiagrammeRsvg::export_svg(DiagrammeR::render_graph(graph_min_max, layout = "tree", output = "graph"))
+cowplot::ggdraw() + cowplot::draw_image(charToRaw(graph_svg))
+dev.off()
+```
+
+```{r}
+
+```
+
+
+
+```{r}
+ligands_oi <- c("NRG3")
+targets_oi <- c("CCN2")
+```
+
+```{r}
+active_signaling_network <- get_ligand_signaling_path(ligands_all = ligands_oi,
+                                                      targets_all = targets_oi,
+                                                      weighted_networks = weighted_networks,
+                                                      ligand_tf_matrix = ligand_tf_matrix,
+                                                      top_n_regulators = 4,
+                                                      minmax_scaling = TRUE) 
+
+
+graph_min_max <- diagrammer_format_signaling_graph(signaling_graph_list = active_signaling_network,
+                                                   ligands_all = ligands_oi, targets_all = targets_oi,
+                                                   sig_color = "indianred", gr_color = "steelblue")
+
+# To render the graph in RStudio Viewer, uncomment following line of code
+png(filename="./ligand nrg3 target ccn2.png", width=18, height=14, units="cm", res=300)
+DiagrammeR::render_graph(graph_min_max, layout = "tree")
+
+# To export/draw the svg, you need to install DiagrammeRsvg
+graph_svg <- DiagrammeRsvg::export_svg(DiagrammeR::render_graph(graph_min_max, layout = "tree", output = "graph"))
+cowplot::ggdraw() + cowplot::draw_image(charToRaw(graph_svg))
+dev.off()
+```
+
+
+```{r}
+ligands_oi <- c("NRG3")
+targets_oi <- c("EDN1")
+```
+
+```{r}
+active_signaling_network <- get_ligand_signaling_path(ligands_all = ligands_oi,
+                                                      targets_all = targets_oi,
+                                                      weighted_networks = weighted_networks,
+                                                      ligand_tf_matrix = ligand_tf_matrix,
+                                                      top_n_regulators = 4,
+                                                      minmax_scaling = TRUE) 
+
+
+graph_min_max <- diagrammer_format_signaling_graph(signaling_graph_list = active_signaling_network,
+                                                   ligands_all = ligands_oi, targets_all = targets_oi,
+                                                   sig_color = "indianred", gr_color = "steelblue")
+
+# To render the graph in RStudio Viewer, uncomment following line of code
+png(filename="./ligand nrg3 target edn1.png", width=18, height=14, units="cm", res=300)
+DiagrammeR::render_graph(graph_min_max, layout = "tree")
+
+# To export/draw the svg, you need to install DiagrammeRsvg
+graph_svg <- DiagrammeRsvg::export_svg(DiagrammeR::render_graph(graph_min_max, layout = "tree", output = "graph"))
+cowplot::ggdraw() + cowplot::draw_image(charToRaw(graph_svg))
+dev.off()
+```
+
+
+
+
