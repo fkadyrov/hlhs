@@ -1,0 +1,225 @@
+```{r}
+library(nichenetr) 
+library(Seurat)
+library(SeuratObject)
+library(tidyverse)
+library(DiagrammeRsvg)
+library(circlize)
+library(ggraph)
+library(tidygraph)
+library(ggnetwork)
+library(dplyr)
+```
+
+```{r}
+setwd("D:/HLHS/2024 final version/total interactions circos plots")
+```
+
+```{r}
+NF_total_interactions <- read.csv("D:/HLHS/2024 final version/nichenetr endocardium circos/split by condition/NF/endocardium_ligand_to_targets_total_interactions.csv")
+
+SysHF_total_interactions <- read.csv("D:/HLHS/2024 final version/nichenetr endocardium circos/split by condition/SysHF/endocardium_ligand_to_targets_total_interactions.csv")
+
+bcell_mast_df <- data.frame(receiver = c('bcell', 'mast'), count = c(0,0))
+
+SysHF_total_interactions <- rbind(SysHF_total_interactions, bcell_mast_df)
+
+SysHF_total_interactions_temp <- SysHF_total_interactions[order(SysHF_total_interactions$receiver),]
+
+rownames(SysHF_total_interactions_temp) <- 1:nrow(SysHF_total_interactions_temp)
+
+SysHF_total_interactions <- SysHF_total_interactions_temp
+
+rm(SysHF_total_interactions_temp)
+rm(bcell_mast_df)
+```
+
+```{r}
+total_interactions <- bind_rows(NF_total_interactions, SysHF_total_interactions) %>%
+  group_by(receiver) %>%
+  summarise(count = sum(count, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+color_key <- c('endothelium' = '#920000',
+               'fibroblast' = '#004949',
+               'cardiomyocyte' = '#009292',
+               'myeloid' = '#ff6db6',
+               'pericyte' = '#490092',
+               'endocardium' = '#006ddb',
+               'tcells' = '#24ff24',
+               'smc' = '#FFA500',
+               'lymphatic' = '#b66dff',
+               'adipocyte' = '#6db6ff',
+               'neuron' = '#E3E300',
+               'bcell' = '#ffb6db',
+               'mast' = '#b6dbff')
+```
+
+#total interactions graph
+```{r}
+# Create edges data frame and add a self-loop for endocardium
+edges <- total_interactions %>%
+  mutate(sender = "endocardium") %>%
+  rename(from = sender, to = receiver) %>%
+  select(from, to, count)
+
+# Define nodes data frame
+nodes <- unique(c(edges$from, edges$to))
+nodes_df <- data.frame(name = nodes)
+
+# Create a graph object
+graph <- tbl_graph(nodes = nodes_df, edges = edges, directed = TRUE)
+
+# Plot using ggraph
+ggraph(graph, layout = 'circle') +
+  geom_edge_arc(aes(width = count),  # Adds a curved line with weight based on count
+                color = color_key['endocardium'],  # Set all arrows to endocardium's color
+                arrow = arrow(length = unit(4, 'mm')), 
+                end_cap = circle(3, 'mm'),
+                curvature = 0.1) +  # Reduced curvature for less intense curves
+  geom_node_point(aes(color = name), size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  scale_edge_width(range = c(0.5, 2)) +
+  scale_color_manual(values = color_key) +
+  theme_void() +
+  labs(title = "Endocardium Interactions with Recipient Cell Types NF and SysHF") +
+  theme(legend.position = "none")
+```
+
+```{r}
+png(filename = "./total interactions circle plot no labels.png", width = 10, height = 10, units = "cm", res = 300)
+ggraph(graph, layout = 'circle') +
+  geom_edge_arc(aes(width = count),  # Adds a curved line with weight based on count
+                color = color_key['endocardium'],  # Set all arrows to endocardium's color
+                arrow = arrow(length = unit(4, 'mm')), 
+                end_cap = circle(3, 'mm'),
+                curvature = 0.1) +  # Reduced curvature for less intense curves
+  geom_node_point(aes(color = name), size = 5) +
+  scale_edge_width(range = c(0.5, 2)) +
+  scale_color_manual(values = color_key) +
+  theme_void() +
+  labs(title = "Endocardium Interactions with Recipient Cell Types") +
+  theme(legend.position = "none")
+dev.off()
+```
+
+```{r}
+NF_interactions <- read.csv("D:/HLHS/2024 final version/nichenetr endocardium circos/split by condition/NF/endocardium_ligand_to_targets.csv")
+
+SysHF_interactions <- read.csv("D:/HLHS/2024 final version/nichenetr endocardium circos/split by condition/SysHF/endocardium_ligand_to_targets.csv")
+```
+
+```{r}
+NF_CCN2 <- subset(NF_interactions, ligand == "CCN2")
+NF_NRG3 <- subset(NF_interactions, ligand == "NRG3")
+
+SysHF_CCN2 <- subset(SysHF_interactions, ligand == "CCN2")
+SysHF_NRG3 <- subset(SysHF_interactions, ligand == "NRG3")
+```
+
+```{r}
+CCN2_NF_SysHF <- rbind(NF_CCN2, SysHF_CCN2)
+NRG3_NF_SysHF <- rbind(NF_NRG3, SysHF_NRG3)
+```
+
+```{r}
+CCN2_interaction_counts <- CCN2_NF_SysHF %>%
+  group_by(receiver) %>%
+  summarize(count = n()) %>%
+  ungroup()
+```
+
+```{r}
+NRG3_interaction_counts <- NRG3_NF_SysHF %>%
+  group_by(receiver) %>%
+  summarize(count = n()) %>%
+  ungroup()
+```
+
+```{r}
+CCN2_NRG3_interactions <- bind_rows(CCN2_interaction_counts, NRG3_interaction_counts) %>%
+  group_by(receiver) %>%
+  summarise(count = sum(count, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+null_df <- data.frame(receiver = c('cardiomyocyte', 'bcell', 'adipocyte', 'tcells', 'pericyte', 'neuron', 'mast'), count = c(0,0,0,0,0,0,0))
+```
+
+```{r}
+CCN2_NRG3_interactions <- rbind(CCN2_NRG3_interactions, null_df)
+```
+
+```{r}
+CCN2_NRG3_interactions <- CCN2_NRG3_interactions %>% arrange(receiver)
+```
+
+
+```{r}
+# Create edges data frame and add a self-loop for endocardium
+edges <- CCN2_NRG3_interactions %>%
+  mutate(sender = "endocardium") %>%
+  rename(from = sender, to = receiver) %>%
+  select(from, to, count)
+
+# Define nodes data frame
+nodes <- unique(c(edges$from, edges$to))
+nodes_df <- data.frame(name = nodes)
+
+# Create a graph object
+graph <- tbl_graph(nodes = nodes_df, edges = edges, directed = TRUE)
+
+# Plot using ggraph
+ggraph(graph, layout = 'circle') +
+  geom_edge_arc(aes(width = count),  # Adds a curved line with weight based on count
+                color = color_key['endocardium'],  # Set all arrows to endocardium's color
+                arrow = arrow(length = unit(4, 'mm')), 
+                end_cap = circle(3, 'mm'),
+                curvature = 0.1) +  # Reduced curvature for less intense curves
+  geom_node_point(aes(color = name), size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  scale_edge_width(range = c(0.5, 2)) +
+  scale_color_manual(values = color_key) +
+  theme_void() +
+  labs(title = "NRG3 and CCN2 interactions NF and SysHF") +
+  theme(legend.position = "none")
+```
+
+```{r}
+png(filename = "./nrg3 and ccn2 interactions circle plot no labels.png", width = 10, height = 10, units = "cm", res = 300)
+ggraph(graph, layout = 'circle') +
+  geom_edge_arc(aes(width = count),  # Adds a curved line with weight based on count
+                color = color_key['endocardium'],  # Set all arrows to endocardium's color
+                arrow = arrow(length = unit(4, 'mm')), 
+                end_cap = circle(3, 'mm'),
+                curvature = 0.1) +  # Reduced curvature for less intense curves
+  geom_node_point(aes(color = name), size = 5) +
+  scale_edge_width(range = c(0.5, 2)) +
+  scale_color_manual(values = color_key) +
+  theme_void() +
+  labs(title = "Endocardium Interactions with Recipient Cell Types") +
+  theme(legend.position = "none")
+dev.off()
+```
+
+```{r}
+pdf(file = "./nrg3 and ccn2 interactions circle plot no labels.pdf", width = 10/2.54, height = 10/2.54)
+ggraph(graph, layout = 'circle') +
+  geom_edge_arc(aes(width = count),  # Adds a curved line with weight based on count
+                color = color_key['endocardium'],  # Set all arrows to endocardium's color
+                arrow = arrow(length = unit(4, 'mm')), 
+                end_cap = circle(3, 'mm'),
+                curvature = 0.1) +  # Reduced curvature for less intense curves
+  geom_node_point(aes(color = name), size = 5) +
+  scale_edge_width(range = c(0.5, 2)) +
+  scale_color_manual(values = color_key) +
+  theme_void() +
+  labs(title = "Endocardium Interactions with Recipient Cell Types") +
+  theme(legend.position = "none")
+dev.off()
+```
+
+
+
+
