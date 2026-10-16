@@ -1,0 +1,299 @@
+```{r}
+library(nichenetr) 
+library(Seurat)
+library(SeuratObject)
+library(tidyverse)
+library(DiagrammeRsvg)
+library(circlize)
+library(ggraph)
+library(tidygraph)
+library(ggnetwork)
+library(dplyr)
+```
+
+```{r}
+setwd("D:/HLHS/2024 final version/nichenetr endocardium circos/split by condition/SysHF")
+```
+
+```{r}
+merged <- readRDS("D:/HLHS/2024 final version/6 hlhs clean global object/HLHS_cleaned_normalized_annotated.rds")
+DimPlot(merged, group.by = "global.type", split.by = "condition")
+DimPlot(merged, group.by = "annotation")
+```
+
+```{r}
+organism <- "human"
+
+if(organism == "human"){
+  lr_network <- readRDS(url("https://zenodo.org/record/7074291/files/lr_network_human_21122021.rds"))
+  ligand_target_matrix <- readRDS(url("https://zenodo.org/record/7074291/files/ligand_target_matrix_nsga2r_final.rds"))
+  weighted_networks <- readRDS(url("https://zenodo.org/record/7074291/files/weighted_networks_nsga2r_final.rds"))
+} else if(organism == "mouse"){
+  lr_network <- readRDS(url("https://zenodo.org/record/7074291/files/lr_network_mouse_21122021.rds"))
+  ligand_target_matrix <- readRDS(url("https://zenodo.org/record/7074291/files/ligand_target_matrix_nsga2r_final_mouse.rds"))
+  weighted_networks <- readRDS(url("https://zenodo.org/record/7074291/files/weighted_networks_nsga2r_final_mouse.rds"))
+
+}
+
+lr_network <- lr_network %>% distinct(from, to)
+head(lr_network)
+
+ligand_target_matrix[1:5,1:5] # target genes in rows, ligands in columns
+
+head(weighted_networks$lr_sig) # interactions and their weights in the ligand-receptor + signaling network
+
+head(weighted_networks$gr) # interactions and their weights in the gene regulatory network
+
+```
+
+```{r}
+merged <- SetIdent(merged, value = merged@meta.data$global.type)
+```
+
+```{r}
+sender_celltypes <- "endocardium"
+receiver_celltypes <- c('endothelium', 'fibroblast', 'cardiomyocyte', 'myeloid', 'pericyte', 'endocardium', 'tcells', 'smc', 'lymphatic', 'adipocyte', 'neuron', 'bcell', 'mast')
+```
+
+```{r}
+nichenet_function <- function(receiver) {
+  expressed_genes_receiver <- get_expressed_genes(receiver, merged, pct = 0.05)
+  all_receptors <- unique(lr_network$to)  
+  expressed_receptors <- intersect(all_receptors, expressed_genes_receiver)
+
+  potential_ligands <- lr_network %>% filter(to %in% expressed_receptors) %>% pull(from) %>% unique()
+  
+  #define a set of potential ligands for both the sender-agnostic and sender-focused approach
+  # Use lapply to get the expressed genes of every sender cell type separately here
+  list_expressed_genes_sender <- sender_celltypes %>% unique() %>% lapply(get_expressed_genes, merged, 0.05)
+  expressed_genes_sender <- list_expressed_genes_sender %>% unlist() %>% unique()
+
+  potential_ligands_focused <- intersect(potential_ligands, expressed_genes_sender) 
+  
+  #define the geneset of interest
+  condition_oi <-  "SysHF"
+  condition_reference <- "NF"
+
+  seurat_obj_receiver <- subset(merged, idents = receiver)
+  
+  #changed min pct to 0.1
+  DE_table_receiver <-  FindMarkers(object = seurat_obj_receiver,
+                                  ident.1 = condition_oi, ident.2 = condition_reference,
+                                  group.by = "condition",
+                                  min.pct = 0.1) %>% rownames_to_column("gene")
+  
+  #changed logFC to 0.4
+  #geneset_oi <- DE_table_receiver %>% filter(p_val_adj <= 0.05 & abs(avg_log2FC) >= 0.4) %>% pull(gene)
+  #removed abs to focus on condition of interest
+  geneset_oi <- DE_table_receiver %>% filter(p_val_adj <= 0.05 & avg_log2FC >= 0.4) %>% pull(gene)
+  geneset_oi <- geneset_oi %>% .[. %in% rownames(ligand_target_matrix)]
+  
+  #define the background genes
+  background_expressed_genes <- expressed_genes_receiver %>% .[. %in% rownames(ligand_target_matrix)]
+  
+  #perform nichenet ligand activity analysis
+  #interest cutoff at auroc of 0.5
+  # area under precision recall curve
+  
+  ligand_activities <- predict_ligand_activities(geneset = geneset_oi,
+                                               background_expressed_genes = background_expressed_genes,
+                                               ligand_target_matrix = ligand_target_matrix,
+                                               potential_ligands = potential_ligands)
+  
+  #potential ligands focused for the sender focused approach
+  ligand_activities <- ligand_activities %>% filter(test_ligand %in% potential_ligands_focused)
+  best_upstream_ligands <- ligand_activities %>% top_n(30, aupr_corrected) %>% arrange(-aupr_corrected) %>%
+    pull(test_ligand) %>% unique()
+  
+  active_ligand_target_links_df <- best_upstream_ligands %>%
+    lapply(get_weighted_ligand_target_links,
+         geneset = geneset_oi,
+         ligand_target_matrix = ligand_target_matrix,
+         n = 100) %>%
+    bind_rows() %>% drop_na()
+  
+  active_ligand_target_links_df <- active_ligand_target_links_df %>% mutate(receiver = receiver)
+  
+  return(active_ligand_target_links_df)
+}
+```
+
+```{r}
+results_list <- lapply(receiver_celltypes, nichenet_function)
+
+#remove empty results
+filtered_results_list <- results_list[!sapply(results_list, function(x) nrow(x) == 0)]
+
+all_results_df <- bind_rows(filtered_results_list)
+```
+
+```{r}
+write.csv(all_results_df, "endocardium_ligand_to_targets.csv", row.names = FALSE)
+```
+
+```{r}
+all_results_df <- read.csv("./endocardium_ligand_to_targets.csv")
+```
+
+```{r}
+interaction_counts <- all_results_df %>%
+  group_by(receiver) %>%
+  summarize(count = n()) %>%
+  ungroup()
+```
+
+```{r}
+write.csv(interaction_counts, "endocardium_ligand_to_targets_total_interactions.csv", row.names = FALSE)
+```
+
+```{r}
+color_key <- c('endothelium' = '#920000',
+               'fibroblast' = '#004949',
+               'cardiomyocyte' = '#009292',
+               'myeloid' = '#ff6db6',
+               'pericyte' = '#490092',
+               'endocardium' = '#006ddb',
+               'tcells' = '#24ff24',
+               'smc' = '#FFA500',
+               'lymphatic' = '#b66dff',
+               'adipocyte' = '#6db6ff',
+               'neuron' = '#E3E300',
+               'bcell' = '#ffb6db',
+               'mast' = '#b6dbff')
+```
+
+#total interactions graph
+```{r}
+# Create edges data frame and add a self-loop for endocardium
+edges <- interaction_counts %>%
+  mutate(sender = "endocardium") %>%
+  rename(from = sender, to = receiver) %>%
+  select(from, to, count)
+
+# Define nodes data frame
+nodes <- unique(c(edges$from, edges$to))
+nodes_df <- data.frame(name = nodes)
+
+# Create a graph object
+graph <- tbl_graph(nodes = nodes_df, edges = edges, directed = TRUE)
+
+# Plot using ggraph
+ggraph(graph, layout = 'circle') +
+  geom_edge_arc(aes(width = count),  # Adds a curved line with weight based on count
+                color = color_key['endocardium'],  # Set all arrows to endocardium's color
+                arrow = arrow(length = unit(4, 'mm')), 
+                end_cap = circle(3, 'mm'),
+                curvature = 0.1) +  # Reduced curvature for less intense curves
+  geom_node_point(aes(color = name), size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  scale_edge_width(range = c(0.5, 2)) +
+  scale_color_manual(values = color_key) +
+  theme_void() +
+  labs(title = "Endocardium Interactions with Recipient Cell Types") +
+  theme(legend.position = "none")
+```
+
+```{r}
+png(filename = "./total interactions circle plot no labels.png", width = 10, height = 10, units = "cm", res = 300)
+ggraph(graph, layout = 'circle') +
+  geom_edge_arc(aes(width = count),  # Adds a curved line with weight based on count
+                color = color_key['endocardium'],  # Set all arrows to endocardium's color
+                arrow = arrow(length = unit(4, 'mm')), 
+                end_cap = circle(3, 'mm'),
+                curvature = 0.1) +  # Reduced curvature for less intense curves
+  geom_node_point(aes(color = name), size = 5) +
+  scale_edge_width(range = c(0.5, 2)) +
+  scale_color_manual(values = color_key) +
+  theme_void() +
+  labs(title = "Endocardium Interactions with Recipient Cell Types") +
+  theme(legend.position = "none")
+dev.off()
+```
+
+#plotting all interactions 
+
+```{r}
+#filter out situations where ligands are found in the target column
+unique_ligands <- unique(all_results_df$ligand)
+
+filtered_data <- all_results_df[!all_results_df$target %in% unique_ligands, ]
+```
+
+
+```{r}
+library(circlize)
+
+# Ensure previous plots are cleared
+circos.clear()
+
+# Loop through each receiver cell type
+for (cell_type in unique(filtered_data$receiver)) {
+  # Filter data for the current cell type
+  data_subset <- filtered_data[filtered_data$receiver == cell_type, ]
+  
+  # Prepare data for the chord diagram
+  data_matrix <- data_subset %>%
+    select(ligand, target, weight)
+  
+  # Initialize a new plot for each cell type
+  pdf(paste0("Chord_Diagram_", cell_type, ".pdf"), width = 20/2.54, height = 20/2.54)
+  
+  # Create the chord diagram
+  chordDiagram(
+    data_matrix,
+    annotationTrack = "grid",
+    transparency = 0.5,
+    directional = 1,  # Enables directionality with arrows
+    diffHeight = 0.04,  # Space out chords for better visibility
+    link.sort = TRUE,  # Sort links to reduce overlap
+    link.lwd = data_subset$weight * 10,  # Scale line width by weight
+    link.border = "darkcyan",
+    link.arr.type = "big.arrow",  # Use "big arrow" style for direction
+    preAllocateTracks = 1  # Pre-allocate space for labels
+  )
+  
+  # Add labels outside and perpendicular to the sectors
+  circos.trackPlotRegion(
+    track.index = 1, 
+    panel.fun = function(x, y) {
+      circos.text(
+        CELL_META$xcenter, CELL_META$ylim[1], 
+        CELL_META$sector.index, 
+        facing = "clockwise", 
+        niceFacing = TRUE,
+        adj = c(0, 0.5)
+      )
+    }, bg.border = NA
+  )
+  
+  # Add a title for each plot
+  title(paste("Chord Diagram for", cell_type))
+  
+  # Save and close the file
+  dev.off()
+}
+
+# Clear the circos environment after the loop
+circos.clear()
+
+
+
+```
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
