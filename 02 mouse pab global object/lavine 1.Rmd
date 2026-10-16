@@ -1,0 +1,189 @@
+```{r}
+library(Seurat)
+library(patchwork)
+library(SeuratDisk)
+```
+
+```{r}
+setwd("D:/HLHS/2024 final version/2 mouse pab global object/")
+```
+
+
+# Load the dataset and create a Seurat Object
+```{r}
+m1.data <- Read10X(data.dir = "D:/HLHS/upenn data/mouse_pab/1/filtered_feature_bc_matrix")
+m1 <- CreateSeuratObject(counts = m1.data)
+m1$sample <- "1"
+m1$condition <-"moderate"
+
+m3.data <- Read10X(data.dir = "D:/HLHS/upenn data/mouse_pab/3/filtered_feature_bc_matrix")
+m3 <- CreateSeuratObject(counts = m3.data)
+m3$sample <- "3"
+m3$condition <-"severe"
+
+m4.data <- Read10X(data.dir = "D:/HLHS/upenn data/mouse_pab/4/filtered_feature_bc_matrix")
+m4 <- CreateSeuratObject(counts = m4.data)
+m4$sample <- "4"
+m4$condition <-"normal"
+
+m5.data <- Read10X(data.dir = "D:/HLHS/upenn data/mouse_pab/5/filtered_feature_bc_matrix")
+m5 <- CreateSeuratObject(counts = m5.data)
+m5$sample <- "5"
+m5$condition <-"severe"
+
+m7.data <- Read10X(data.dir = "D:/HLHS/upenn data/mouse_pab/7/filtered_feature_bc_matrix")
+m7 <- CreateSeuratObject(counts = m7.data)
+m7$sample <- "7"
+m7$condition <-"normal"
+
+m8.data <- Read10X(data.dir = "D:/HLHS/upenn data/mouse_pab/8/filtered_feature_bc_matrix")
+m8 <- CreateSeuratObject(counts = m8.data)
+m8$sample <- "8"
+m8$condition <-"severe"
+
+m13.data <- Read10X(data.dir = "D:/HLHS/upenn data/mouse_pab/13/filtered_feature_bc_matrix")
+m13 <- CreateSeuratObject(counts = m13.data)
+m13$sample <- "13"
+m13$condition <-"moderate"
+
+m14.data <- Read10X(data.dir = "D:/HLHS/upenn data/mouse_pab/14/filtered_feature_bc_matrix")
+m14 <- CreateSeuratObject(counts = m14.data)
+m14$sample <- "14"
+m14$condition <-"moderate"
+
+m16.data <- Read10X(data.dir = "D:/HLHS/upenn data/mouse_pab/16/filtered_feature_bc_matrix")
+m16 <- CreateSeuratObject(counts = m16.data)
+m16$sample <- "16"
+m16$condition <-"severe"
+
+m20.data <- Read10X(data.dir = "D:/HLHS/upenn data/mouse_pab/20/filtered_feature_bc_matrix")
+m20 <- CreateSeuratObject(counts = m20.data)
+m20$sample <- "20"
+m20$condition <-"normal"
+```
+
+
+
+```{r}
+merged <- merge(m1, y = c(m3,m4,m5,m7,m8,m13,m14,m16,m20))
+```
+#garbage clear
+```{r}
+rm(m1)
+rm(m1.data)
+rm(m3)
+rm(m3.data)
+rm(m4)
+rm(m4.data)
+rm(m5)
+rm(m5.data)
+rm(m7)
+rm(m7.data)
+rm(m8)
+rm(m8.data)
+rm(m13)
+rm(m13.data)
+rm(m14)
+rm(m14.data)
+rm(m16)
+rm(m16.data)
+rm(m20)
+rm(m20.data)
+
+
+
+gc()
+```
+
+
+```{r}
+merged[["percent.mt"]] <- PercentageFeatureSet(merged, pattern = "^mt-")
+```
+
+```{r}
+merged
+```
+
+```{r}
+png(filename="./pre qc violin plot.png", width=18, height=10, units="cm", res=300)
+VlnPlot(merged, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0)
+dev.off()
+```
+
+```{r}
+merged_filtered <- subset(merged, subset = nCount_RNA > 1000 & nCount_RNA < 10000 & percent.mt < 5)
+```
+
+```{r}
+merged_filtered
+```
+
+```{r}
+png(filename="./post qc violin plot.png", width = 18, height = 10, units = "cm", res = 300)
+VlnPlot(merged_filtered, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0)
+dev.off()
+```
+
+```{r}
+SaveH5Seurat(merged_filtered, filename = "./scrublet step/merged_postQC.h5Seurat")
+```
+
+```{r}
+Convert("./scrublet step/merged_postQC.h5Seurat", dest = "h5ad")
+```
+
+
+```{r}
+#### Load in doublet output
+scrub = read.csv('./scrublet step/scrublet-scores/all.csv',header=T,row.names=1)
+```
+
+```{r}
+merged_filtered@meta.data$scrublet_score = scrub$scrublet_score
+merged_filtered@meta.data$scrublet_cluster_score = scrub$scrublet_cluster_score
+merged_filtered@meta.data$bh_pval = scrub$bh_pval
+```
+
+```{r}
+merged_filtered$sample <- factor(x = merged_filtered$sample, levels = c('4', '7', '20', '1', '13', '14', '3', '5', '8', '16'))
+```
+
+```{r}
+png(filename="./scrublet sample violin plot.png", width = 25, height = 10, units = "cm", res = 300)
+VlnPlot(merged_filtered, group.by = "sample", features = "scrublet_score", pt.size = 0) + NoLegend()
+dev.off()
+```
+
+```{r}
+merged_filtered
+```
+
+```{r}
+merged_filtered <- subset(
+  x = merged_filtered,
+  subset = scrublet_score < 0.25
+)
+```
+
+```{r}
+merged_filtered
+```
+
+```{r}
+VlnPlot(merged_filtered, group.by = "sample", features = "scrublet_score", pt.size = 0) + NoLegend()
+```
+
+
+
+
+```{r}
+saveRDS(merged_filtered, "./merged_postQC_doubletRemoval.rds")
+```
+
+
+
+
+
+
+
+
