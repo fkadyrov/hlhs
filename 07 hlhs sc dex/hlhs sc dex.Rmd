@@ -1,0 +1,197 @@
+
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(RSpectra)
+library(SeuratDisk)
+```
+
+```{r}
+setwd("D:/HLHS/2024 final version/7 hlhs sc dex/")
+```
+
+```{r}
+sample <- readRDS("D:/HLHS/2024 final version/6 hlhs clean global object/HLHS_cleaned_normalized_annotated.rds")
+DimPlot(sample, group.by = "global.type")
+```
+
+
+```{r}
+fun <- function(x) {
+  if (x == "Donor") {"Donor"} 
+  else if (x == "NF") {"HLHS"}
+  else if (x == "SysHF") {"HLHS"}
+}
+
+sample$disease <- mapply(fun, sample$condition)
+
+DimPlot(sample, split.by = "disease", group.by = "global.type")
+```
+
+#findmarkers deg
+```{r}
+sample <- SetIdent(sample, value = sample@meta.data$global.type)
+```
+
+#donor vs hlhs
+```{r}
+output <- "D:/HLHS/2024 final version/7 hlhs sc dex/donor_hlhs/"
+sample$celltype.disease <- paste(Idents(sample), sample$disease, sep="_")
+sample$celltype <- Idents(sample)
+Idents(sample) <- "celltype.disease"
+for (i in c('endothelium', 'fibroblast', 'cardiomyocyte', 'myeloid', 'pericyte', 'endocardium', 'tcells', 'smc', 'lymphatic', 'adipocyte', 'neuron', 'bcell', 'mast')){ 
+try({
+ident1 <- paste0(i,"_Donor")
+ident2 <- paste0(i,"_HLHS")
+genotype.diffgenes <- FindMarkers(sample, ident.1 = ident1, ident.2=ident2, only.pos = FALSE)
+genotype.diffgenes <- genotype.diffgenes[genotype.diffgenes$avg_log2FC > 0.4 | genotype.diffgenes$avg_log2FC < -0.4,]
+genotype.diffgenes<- genotype.diffgenes[genotype.diffgenes$p_val_adj < 0.05, ]
+write.csv(genotype.diffgenes, file=paste0(output,ident1,ident2,".csv"))
+})
+}
+```
+
+
+
+#donor vs nf
+```{r}
+
+sample <- SetIdent(sample, value = sample@meta.data$global.type)
+
+output <- "D:/HLHS/2024 final version/7 hlhs sc dex/donor_nf/"
+sample$celltype.condition <- paste(Idents(sample), sample$condition, sep="_")
+sample$celltype <- Idents(sample)
+Idents(sample) <- "celltype.condition"
+for (i in c('endothelium', 'fibroblast', 'cardiomyocyte', 'myeloid', 'pericyte', 'endocardium', 'tcells', 'smc', 'lymphatic', 'adipocyte', 'neuron', 'bcell', 'mast')){ 
+try({
+ident1 <- paste0(i,"_Donor")
+ident2 <- paste0(i,"_NF")
+genotype.diffgenes <- FindMarkers(sample, ident.1 = ident1, ident.2=ident2, only.pos = FALSE)
+genotype.diffgenes <- genotype.diffgenes[genotype.diffgenes$avg_log2FC > 0.4 | genotype.diffgenes$avg_log2FC < -0.4,]
+genotype.diffgenes<- genotype.diffgenes[genotype.diffgenes$p_val_adj < 0.05, ]
+write.csv(genotype.diffgenes, file=paste0(output,ident1,ident2,".csv"))
+})
+}
+```
+
+#donor vs syshf
+```{r}
+
+sample <- SetIdent(sample, value = sample@meta.data$global.type)
+
+output <- "D:/HLHS/2024 final version/7 hlhs sc dex/donor_syshf/"
+sample$celltype.condition <- paste(Idents(sample), sample$condition, sep="_")
+sample$celltype <- Idents(sample)
+Idents(sample) <- "celltype.condition"
+for (i in c('endothelium', 'fibroblast', 'cardiomyocyte', 'myeloid', 'pericyte', 'endocardium', 'tcells', 'smc', 'lymphatic', 'adipocyte', 'neuron', 'bcell', 'mast')){ 
+try({
+ident1 <- paste0(i,"_Donor")
+ident2 <- paste0(i,"_SysHF")
+genotype.diffgenes <- FindMarkers(sample, ident.1 = ident1, ident.2=ident2, only.pos = FALSE)
+genotype.diffgenes <- genotype.diffgenes[genotype.diffgenes$avg_log2FC > 0.4 | genotype.diffgenes$avg_log2FC < -0.4,]
+genotype.diffgenes<- genotype.diffgenes[genotype.diffgenes$p_val_adj < 0.05, ]
+write.csv(genotype.diffgenes, file=paste0(output,ident1,ident2,".csv"))
+})
+}
+```
+
+#nf vs syshf
+```{r}
+
+sample <- SetIdent(sample, value = sample@meta.data$global.type)
+
+output <- "D:/HLHS/2024 final version/7 hlhs sc dex/nf_syshf/"
+sample$celltype.condition <- paste(Idents(sample), sample$condition, sep="_")
+sample$celltype <- Idents(sample)
+Idents(sample) <- "celltype.condition"
+for (i in c('endothelium', 'fibroblast', 'cardiomyocyte', 'myeloid', 'pericyte', 'endocardium', 'tcells', 'smc', 'lymphatic', 'adipocyte', 'neuron', 'bcell', 'mast')){ 
+try({
+ident1 <- paste0(i,"_NF")
+ident2 <- paste0(i,"_SysHF")
+genotype.diffgenes <- FindMarkers(sample, ident.1 = ident1, ident.2=ident2, only.pos = FALSE)
+genotype.diffgenes <- genotype.diffgenes[genotype.diffgenes$avg_log2FC > 0.4 | genotype.diffgenes$avg_log2FC < -0.4,]
+genotype.diffgenes<- genotype.diffgenes[genotype.diffgenes$p_val_adj < 0.05, ]
+write.csv(genotype.diffgenes, file=paste0(output,ident1,ident2,".csv"))
+})
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
