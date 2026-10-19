@@ -1,0 +1,319 @@
+```{r}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(SeuratDisk)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+```
+
+```{r}
+sample <- readRDS("D:/HLHS/2024 final version/1 global object/hlhs_bcell.rds")
+```
+
+```{r}
+setwd("D:/HLHS/2024 final version/5 hlhs cleaning/12 bcell/")
+```
+
+
+
+```{r}
+
+DefaultAssay(sample) <- 'RNA'
+sample <- SCTransform(sample, vars.to.regress = c("percent.mt", "nCount_RNA"))
+
+sample <- RunPCA(sample, npcs=100, verbose=TRUE)
+sample <- RunHarmony(sample, c("sample"), reduction = "pca", reduction.save = "harmony", assay.use = "SCT")
+sample <- RunUMAP(sample, reduction = "harmony", dims = 1:80, return.model = TRUE)
+sample <- FindNeighbors(sample, reduction = "harmony", dims = 1:80)
+sample <- FindClusters(sample, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = TRUE)
+
+
+```
+
+
+```{r}
+saveRDS(sample, "./subset_normalized.rds")
+sample <- readRDS("./subset_normalized.rds")
+```
+
+
+```{r}
+DimPlot(sample, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+#cardiomyocyte
+FeaturePlot(sample, features = "RYR2")
+#endothelium
+FeaturePlot(sample, features = "PECAM1")
+FeaturePlot(sample, features = "VWF")
+#endocardium
+FeaturePlot(sample, features = "CDH11")
+FeaturePlot(sample, features = "NPR3")
+FeaturePlot(sample, features = "LEPR")
+#fibroblasts
+FeaturePlot(sample, features = "DCN")
+FeaturePlot(sample, features = "FAP")
+FeaturePlot(sample, features = "POSTN")
+#myeloid
+FeaturePlot(sample, features = "C1QC")
+#epicardium
+FeaturePlot(sample, features = "WT1")
+#neuron
+FeaturePlot(sample, features = "NRXN1")
+#lymphatics
+FeaturePlot(sample, features = "CCL21")
+#proliferating
+FeaturePlot(sample, features = "MKI67")
+#smc
+FeaturePlot(sample, features = "ACTA2")
+#pericyte
+FeaturePlot(sample, features = "KCNJ8")
+#bcell
+FeaturePlot(sample, features = "MS4A1")
+#tcell
+FeaturePlot(sample, features = "IL7R")
+#mast
+FeaturePlot(sample, features = "KIT")
+#adipocyte
+FeaturePlot(sample, features = "PLIN1")
+#junk
+FeaturePlot(sample, features = "percent.mt")
+#nkt
+FeaturePlot(sample, features = "KLRF1")
+```
+
+```{r}
+png(filename="./sample 09 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(sample, group.by = "SCT_snn_res.0.9", label = TRUE)
+dev.off()
+
+png(filename="./sample 09 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(sample, group.by = "SCT_snn_res.0.9", label = FALSE)
+dev.off()
+```
+
+```{r}
+DefaultAssay(sample) <- 'SCT'
+Idents(sample) <- "SCT_snn_res.0.9"
+rna.markers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./sample_DGE_GEX_res0.9.csv", quote = FALSE)
+```
+
+
+
+```{r}
+VlnPlot(sample, features = "nFeature_RNA", group.by = 'SCT_snn_res.0.9')
+VlnPlot(sample, features = "nCount_RNA", group.by = 'SCT_snn_res.0.9')
+VlnPlot(sample, features = "percent.mt", group.by = 'SCT_snn_res.0.9')
+```
+
+
+#annotate
+```{r}
+fun <- function(x) {
+  if (x == "0") {"bcell"} 
+  else if (x == "1") {"bcell"}
+  else if (x == "2") {"pdc"}
+  else if (x == "3") {"myeloid"}
+  else if (x == "4") {"fibroblast"}
+  else if (x == "5") {"bcell"}
+  else if (x == "6") {"cardiomyocyte"}
+}
+
+sample$annotation <- mapply(fun, sample$SCT_snn_res.0.9)
+
+
+```
+
+```{r}
+DimPlot(sample, group.by = "annotation")
+```
+
+```{r}
+Idents(sample) <- "annotation"
+sample<- subset(sample, idents = c("bcell"))
+
+DimPlot(sample, group.by = "annotation")
+```
+
+```{r}
+saveRDS(sample, "./hlhs_subset_cleaned_annotated.rds")
+sample <- readRDS("./hlhs_subset_cleaned_annotated.rds")
+```
+
+
+```{r}
+
+DefaultAssay(sample) <- 'RNA'
+sample <- SCTransform(sample, vars.to.regress = c("percent.mt", "nCount_RNA"))
+
+sample <- RunPCA(sample, npcs=100, verbose=TRUE)
+sample <- RunHarmony(sample, c("sample"), reduction = "pca", reduction.save = "harmony", assay.use = "SCT")
+sample <- RunUMAP(sample, reduction = "harmony", dims = 1:80, return.model = TRUE)
+sample <- FindNeighbors(sample, reduction = "harmony", dims = 1:80)
+sample <- FindClusters(sample, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = TRUE)
+
+
+```
+
+```{r}
+DimPlot(sample, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+#cardiomyocyte
+FeaturePlot(sample, features = "RYR2")
+FeaturePlot(sample, features = "TNNT2")
+#endothelium
+FeaturePlot(sample, features = "PECAM1")
+#endocardium
+FeaturePlot(sample, features = "CDH11")
+FeaturePlot(sample, features = "NPR3")
+FeaturePlot(sample, features = "LEPR")
+#fibroblasts
+FeaturePlot(sample, features = "DCN")
+#myeloid
+FeaturePlot(sample, features = "C1QC")
+#epicardium
+FeaturePlot(sample, features = "WT1")
+#neuron
+FeaturePlot(sample, features = "NRXN1")
+#lymphatics
+FeaturePlot(sample, features = "CCL21")
+#proliferating
+FeaturePlot(sample, features = "MKI67")
+#smc
+FeaturePlot(sample, features = "ACTA2")
+#pericyte
+FeaturePlot(sample, features = "KCNJ8")
+#bcell
+FeaturePlot(sample, features = "MS4A1")
+#tcell
+FeaturePlot(sample, features = "IL7R")
+#mast
+FeaturePlot(sample, features = "KIT")
+#adipocyte
+FeaturePlot(sample, features = "PLIN1")
+#junk
+FeaturePlot(sample, features = "percent.mt")
+
+```
+
+```{r}
+VlnPlot(sample, features = "nFeature_RNA", group.by = 'SCT_snn_res.0.7')
+VlnPlot(sample, features = "nCount_RNA", group.by = 'SCT_snn_res.0.7')
+VlnPlot(sample, features = "percent.mt", group.by = 'SCT_snn_res.0.7')
+```
+
+```{r}
+png(filename="./sample2 07 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(sample, group.by = "SCT_snn_res.0.7", label = TRUE)
+dev.off()
+
+png(filename="./sample2 07 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(sample, group.by = "SCT_snn_res.0.7", label = FALSE)
+dev.off()
+```
+
+```{r}
+DefaultAssay(sample) <- 'SCT'
+Idents(sample) <- "SCT_snn_res.0.7"
+rna.markers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./sample2_DGE_GEX_res0.7.csv", quote = FALSE)
+```
+
+
+
+#annotate
+```{r}
+fun <- function(x) {
+  if (x == "0") {"bcell"} 
+  else if (x == "1") {"plasma"}
+}
+
+sample$annotation <- mapply(fun, sample$SCT_snn_res.0.7)
+
+
+```
+
+```{r}
+DimPlot(sample, group.by = "annotation")
+```
+
+
+```{r}
+sample$condition <- factor(x = sample$condition, levels = c('Donor', 'NF', 'SysHF'))
+```
+
+```{r}
+sample$annotation <- factor(x = sample$annotation, levels = c('bcell', 'plasma'))
+```
+
+```{r}
+png(filename = "./hlhs annotation.png", width = 25, height = 20, units = "cm", res = 600)
+DimPlot(sample, reduction = 'umap', group.by = 'annotation', label.size = 7, label = FALSE, pt.size = 1)+
+  theme(legend.text=element_text(size=10))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","orange","#b66dff","#6db6ff","yellow2","#ffb6db","#b6dbff","red", 'darkblue'))
+dev.off()
+```
+
+
+
+```{r}
+png(filename = "./hlhs annotation split.png", width = 65, height = 20, units = "cm", res = 600)
+DimPlot(sample, reduction = 'umap', group.by = 'annotation', label.size = 7, label = FALSE, pt.size = 1, split.by = 'condition')+
+  theme(legend.text=element_text(size=10))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","orange","#b66dff","#6db6ff","yellow2","#ffb6db","#b6dbff","red", 'darkblue'))
+dev.off()
+```
+
+```{r}
+png(filename="./barplot hlhs annotated.png", width=40, height=20, units="cm", res=600)
+ggplot(sample@meta.data, aes(x = condition, fill = annotation)) +
+  geom_bar(position = "fill", width = 0.95) +
+  xlab("Sample") +
+  ylab("Proportion") +
+  theme(legend.title = element_blank())+ coord_fixed(ratio=5)  +
+  theme(legend.text=element_text(size=25)) +
+  scale_fill_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","orange","#b66dff","#6db6ff","yellow2","#ffb6db","#b6dbff","red", 'darkblue'))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.text=element_text(size=25))+ 
+  theme(axis.text = element_text(size = 25))
+dev.off()
+```
+
+```{r}
+saveRDS(sample, "./hlhs_subset_cleaned_annotated.rds")
+sample <- readRDS("./hlhs_subset_cleaned_annotated.rds")
+```
+
+
+
+
+
+
+
+
+
+
