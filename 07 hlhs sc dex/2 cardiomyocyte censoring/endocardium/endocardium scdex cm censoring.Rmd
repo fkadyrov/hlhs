@@ -1,0 +1,100 @@
+
+
+#remove cardiomyocyte genes
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(DESeq2)
+library(SingleCellExperiment)
+library(Matrix.utils)
+```
+
+#working directory
+```{r}
+setwd("D:/HLHS/2024 final version/7 hlhs sc dex/2 cardiomyocyte censoring/endocardium/")
+```
+
+
+#pseudobulkdex tables
+```{r}
+donor_hlhs <- read.csv("D:/HLHS/2024 final version/7 hlhs sc dex/donor_hlhs/endocardium_Donorendocardium_HLHS.csv")
+
+syshf_nf <- read.csv("D:/HLHS/2024 final version/7 hlhs sc dex/nf_syshf/endocardium_NFendocardium_SysHF.csv")
+
+donor_nf <- read.csv("D:/HLHS/2024 final version/7 hlhs sc dex/donor_nf/endocardium_Donorendocardium_NF.csv")
+
+donor_syshf <- read.csv("D:/HLHS/2024 final version/7 hlhs sc dex/donor_syshf/endocardium_Donorendocardium_SysHF.csv")
+```
+
+
+#vector of cardiomyocyte marker genes
+```{r}
+globalmarker <- read.csv("D:/HLHS/2024 final version/6 hlhs clean global object/hlhs_clean_globaltype.csv")
+
+cm <- globalmarker[globalmarker$cluster == 'cardiomyocyte',]
+cm <- cm[cm$avg_log2FC > 1.0,]
+cm <- as.vector(cm$gene)
+
+cmdf <- as.data.frame(cm)
+```
+
+#donor hlhs intersection
+```{r}
+clean_donor_hlhs <- donor_hlhs[!donor_hlhs$X %in% cm,]
+
+donor_hlhs
+clean_donor_hlhs
+```
+
+#syshf nf intersection
+```{r}
+clean_syshf_nf <- syshf_nf[!syshf_nf$X %in% cm,]
+
+syshf_nf
+clean_syshf_nf
+```
+
+#nf donor intersection
+```{r}
+clean_nf_donor <- donor_nf[!donor_nf$X %in% cm,]
+
+donor_nf
+clean_nf_donor
+```
+
+#syshf donor intersection
+```{r}
+clean_syshf_donor <- donor_syshf[!donor_syshf$X %in% cm,]
+
+donor_syshf
+clean_syshf_donor
+```
+
+#save tsv
+```{r}
+write.table(clean_donor_hlhs, file="donor_hlhs_intersection_censored.tsv", sep="\t", quote=F, col.names=NA)
+
+write.table(clean_syshf_nf, file="syshf_nf_intersection_censored.tsv", sep="\t", quote=F, col.names=NA)
+
+write.table(clean_nf_donor, file="nf_donor_intersection_censored.tsv", sep="\t", quote=F, col.names=NA)
+
+write.table(clean_syshf_donor, file="syshf_donor_intersection_censored.tsv", sep="\t", quote=F, col.names=NA)
+```
+
