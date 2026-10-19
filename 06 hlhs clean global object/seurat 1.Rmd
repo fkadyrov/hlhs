@@ -1,0 +1,212 @@
+```{r}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(SeuratDisk)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+```
+
+```{r}
+setwd("D:/HLHS/2024 final version/6 hlhs clean global object/")
+```
+
+
+```{r}
+cardiomyocyte <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/1 cardiomyocyte/hlhs_subset_cleaned_annotated.rds")
+cardiomyocyte$global.type <-"cardiomyocyte"
+
+endocardium <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/2 endocardium/hlhs_subset_cleaned_annotated.rds")
+endocardium$global.type <-"endocardium"
+
+fibroblast <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/3 fibroblast/hlhs_subset_cleaned_annotated.rds")
+fibroblast$global.type <-"fibroblast"
+
+endothelium <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/4 endothelium/hlhs_subset_cleaned_annotated.rds")
+endothelium$global.type <-"endothelium"
+
+myeloid <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/5 myeloid/hlhs_subset_cleaned_annotated.rds")
+myeloid$global.type <-"myeloid"
+
+smc <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/6 smc/hlhs_subset_cleaned_annotated.rds")
+smc$global.type <-"smc"
+
+pericyte <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/7 pericyte/hlhs_subset_cleaned_annotated.rds")
+pericyte$global.type <-"pericyte"
+
+tcells <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/8 tcells/hlhs_subset_cleaned_annotated.rds")
+tcells$global.type <-"tcells"
+
+lymphatic <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/9 lymphatic/hlhs_subset_cleaned_annotated.rds")
+lymphatic$global.type <-"lymphatic"
+
+adipocyte <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/10 adipocyte/hlhs_subset_cleaned_annotated.rds")
+adipocyte$global.type <-"adipocyte"
+
+neuron <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/11 neuron/hlhs_subset_cleaned_annotated.rds")
+neuron$global.type <-"neuron"
+
+bcell <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/12 bcell/hlhs_subset_cleaned_annotated.rds")
+bcell$global.type <-"bcell"
+
+mast <- readRDS("D:/HLHS/2024 final version/5 hlhs cleaning/13 mast/hlhs_subset_cleaned_annotated.rds")
+mast$global.type <-"mast"
+```
+
+
+```{r}
+sample <- merge(cardiomyocyte, y = c(endocardium, fibroblast, endothelium, myeloid, smc, pericyte, tcells, lymphatic, adipocyte, neuron, bcell, mast))
+```
+
+```{r}
+rm(cardiomyocyte)
+rm(endocardium)
+rm(fibroblast)
+rm(endothelium)
+rm(myeloid)
+rm(smc)
+rm(pericyte)
+rm(tcells)
+rm(lymphatic)
+rm(adipocyte)
+rm(neuron)
+rm(bcell)
+rm(mast)
+gc()
+```
+
+```{r}
+saveRDS(sample, file = "./merged_clean_nonorm.rds")
+```
+
+#following is run on ris
+```{r}
+
+setwd("/Farid/Farid/HLHS_2024/hlhs_clean") #syntax different
+
+
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+
+sample <- readRDS("./merged_clean_nonorm.rds")
+
+DefaultAssay(sample) <- 'RNA'
+sample <- SCTransform(sample, vars.to.regress = c("percent.mt", "nCount_RNA"))
+
+sample <- RunPCA(sample, npcs=100, verbose=TRUE)
+sample <- RunHarmony(sample, c("sample"), reduction = "pca", reduction.save = "harmony", assay.use = "SCT")
+sample <- RunUMAP(sample, reduction = "harmony", dims = 1:80, return.model = TRUE)
+sample <- FindNeighbors(sample, reduction = "harmony", dims = 1:80)
+sample <- FindClusters(sample, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = TRUE)
+
+png(filename = "./hlhs clean annotate seurat.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(sample, reduction = 'umap', group.by = 'global.type', label.size = 7, label=TRUE, pt.size = 1)
+dev.off()
+
+DefaultAssay(sample) <- 'SCT'
+Idents(sample) <- "global.type"
+rna.rnamarkers <- FindAllMarkers(sample, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.rnamarkers, file ="./hlhs_clean_global.type.csv", quote = FALSE)
+
+saveRDS(sample, "./HLHS_cleaned_normalized.rds")
+
+```
+
+```{r}
+sample <- readRDS("./HLHS_cleaned_normalized.rds")
+```
+
+
+```{r}
+DimPlot(sample, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(sample, group.by = "SCT_snn_res.0.9", label = TRUE)
+DimPlot(sample, group.by = "global.type", label = TRUE)
+```
+
+```{r}
+x <- as.data.frame(table(sample@meta.data$global.type))
+```
+
+
+```{r}
+sample$global.type <- factor(x = sample$global.type, levels = c('endothelium', 'fibroblast', 'cardiomyocyte', 'myeloid', 'pericyte', 'endocardium', 'tcells', 'smc', 'lymphatic', 'adipocyte', 'neuron', 'bcell', 'mast'))
+```
+
+```{r}
+sample$condition <- factor(x = sample$condition, levels = c('Donor', 'NF', 'SysHF'))
+```
+
+```{r}
+genes <- c('VWF', 'DCN', 'MYOM2', 'F13A1', 'RGS5', 'LEPR', 'IL7R', 'MYH11', 'CCL21', 'PLIN1', 'NRXN1', 'PAX5', 'KIT')
+
+png(filename = "./marker gene violin plot.png", width = 35, height = 20, units = "cm", res = 300)
+VlnPlot(sample, features = genes, cols = sample$global.type, stack = TRUE, group.by = "global.type") + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black")) + NoLegend()+
+  scale_fill_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","orange","#b66dff","#6db6ff","yellow2","#ffb6db","#b6dbff","red", 'darkblue'))
+dev.off()
+
+```
+
+
+```{r}
+png(filename = "./hlhs annotation.png", width = 25, height = 20, units = "cm", res = 600)
+DimPlot(sample, reduction = 'umap', group.by = 'global.type', label.size = 7, label = FALSE, pt.size = 1)+
+  theme(legend.text=element_text(size=10))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","orange","#b66dff","#6db6ff","yellow2","#ffb6db","#b6dbff","red", 'darkblue'))
+dev.off()
+```
+
+```{r}
+png(filename = "./hlhs annotation split.png", width = 65, height = 20, units = "cm", res = 600)
+DimPlot(sample, reduction = 'umap', group.by = 'global.type', label.size = 7, label = FALSE, pt.size = 1, split.by = 'condition')+
+  theme(legend.text=element_text(size=10))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","orange","#b66dff","#6db6ff","yellow2","#ffb6db","#b6dbff","red", 'darkblue'))
+dev.off()
+```
+
+```{r}
+png(filename="./barplot hlhs annotated.png", width=40, height=20, units="cm", res=600)
+ggplot(sample@meta.data, aes(x = condition, fill = global.type)) +
+  geom_bar(position = "fill", width = 0.95) +
+  xlab("Sample") +
+  ylab("Proportion") +
+  theme(legend.title = element_blank())+ coord_fixed(ratio=5)  +
+  theme(legend.text=element_text(size=25)) +
+  scale_fill_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","orange","#b66dff","#6db6ff","yellow2","#ffb6db","#b6dbff","red", 'darkblue'))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.text=element_text(size=25))+ 
+  theme(axis.text = element_text(size = 25))
+dev.off()
+```
+
+
+```{r}
+saveRDS(sample, "./HLHS_cleaned_normalized_annotated.rds")
+```
+
+
+#number of nuclei
+```{r}
+sample <- readRDS("./HLHS_cleaned_normalized_annotated.rds")
+```
+
+
+```{r}
+length(Cells(sample))
+```
+
+
