@@ -1,0 +1,180 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(biomaRt)
+```
+
+
+```{r}
+setwd("D:/HLHS/2024 final version/10 global mapping/2 global mapping/")
+```
+
+```{r}
+hlhs <- readRDS("D:/HLHS/2024 final version/6 hlhs clean global object/HLHS_cleaned_normalized_annotated.rds")
+DimPlot(hlhs, reduction = "umap", label = TRUE, group.by = "global.type")
+```
+
+```{r}
+hlhs <- RunSPCA(hlhs, assay = 'SCT', graph = 'SCT_snn')
+DimPlot(hlhs, reduction = "umap", label = TRUE, group.by = "global.type")
+```
+
+```{r}
+mpab <- readRDS("D:/HLHS/2024 final version/10 global mapping/1 mouse pab human genes/humangenes_mpab.rds")
+DimPlot(mpab, reduction = "umap", label = TRUE, group.by = "global.type", split.by = "condition")
+```
+
+
+
+
+```{r}
+anchors <- FindTransferAnchors(
+  reference = hlhs,
+  query = mpab,
+  normalization.method = "SCT",
+  reference.reduction = "spca",
+  reference.assay = "SCT",
+  dims = 1:40
+)
+```
+
+
+
+
+```{r}
+mpab <- MapQuery(
+  anchorset = anchors,
+  query = mpab,
+  reference = hlhs,
+  refdata = list(
+    celltype = "global.type"
+  ),
+  reference.reduction = "spca",
+  reduction.model = "umap"
+)
+```
+
+```{r}
+DimPlot(mpab, reduction = "ref.umap", group.by = "predicted.celltype")
+```
+
+```{r}
+saveRDS(mpab, "./mpab_hlhs_mapped.rds")
+```
+
+```{r}
+mpab <- readRDS("./mpab_hlhs_mapped.rds")
+DimPlot(mpab, reduction = "ref.umap", group.by = 'predicted.celltype', split.by = "condition", label = TRUE)
+```
+
+```{r}
+Idents(mpab) <- "predicted.celltype"
+mpab.averageexpression <- AverageExpression(mpab, features = c('endothelium', 'fibroblast', 'cardiomyocyte', 'myeloid', 'pericyte', 'endocardium', 'tcells', 'smc', 'lymphatic', 'adipocyte', 'neuron', 'bcell', 'mast'), assays = "prediction.score.celltype")
+
+mpab.averageexpression <- as.matrix(mpab.averageexpression)
+mapping_scores <- mpab.averageexpression[[1]]
+
+list <- c('endothelium', 'fibroblast', 'cardiomyocyte', 'myeloid', 'pericyte', 'endocardium', 'tcells', 'smc', 'lymphatic', 'adipocyte', 'neuron', 'bcell', 'mast')
+
+png(filename="./mapping scores mpab hlhs heatmap.png", width = 30, height = 30, units ="cm", res =300)
+pheatmap(mapping_scores[,list], color=colorRampPalette(c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))(50), scale="none", cellheight = 30, cellwidth = 30, cexCol=0.5, cluster_rows=FALSE, fontsize_row=25, fontsize_col=25, cluster_cols = FALSE, legend = TRUE, fontsize = 20)
+dev.off()
+```
+
+
+
+
+#mapping scores with query identities 
+
+```{r}
+Idents(mpab) <- "global.type"
+mpab.averageexpression <- AverageExpression(mpab, features = c('endothelium', 'fibroblast', 'cardiomyocyte', 'myeloid', 'pericyte', 'endocardium', 'tcells', 'smc', 'lymphatic', 'adipocyte', 'neuron', 'bcell', 'mast'), assays = "prediction.score.celltype")
+
+mpab.averageexpression <- as.matrix(mpab.averageexpression)
+
+mapping_scores <- mpab.averageexpression[[1]]
+
+
+
+list <- c('endothelium', 'fibroblast', 'cardiomyocyte', 'myeloid', 'pericyte', 'endocardium', 'tcells', 'smc', 'lymphatics', 'neuron', 'bcell', 'epicardium')
+
+png(filename="./mapping scores mpab hlhs query heatmap.png", width = 30, height = 30, units ="cm", res =300)
+pheatmap(mapping_scores[,list], color=colorRampPalette(c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))(50), scale="none", cellheight = 30, cellwidth = 30, cexCol=0.5, cluster_rows=FALSE, fontsize_row=25, fontsize_col=25, cluster_cols = FALSE, legend = TRUE, fontsize = 20)
+dev.off()
+```
+
+
+
+
+```{r}
+mpab$condition <- factor(x = mpab$condition, levels = c('normal', 'moderate', 'severe'))
+```
+
+```{r}
+mpab$predicted.celltype <- factor(x = mpab$predicted.celltype, levels = c('endothelium', 'fibroblast', 'cardiomyocyte', 'myeloid', 'pericyte', 'endocardium', 'tcells', 'smc', 'lymphatic', 'adipocyte', 'neuron', 'bcell', 'mast'))
+```
+
+```{r}
+png(filename="./mpab_hlhs_mapped_dimplot.png", width=25, height=20, units="cm", res=600)
+DimPlot(mpab, reduction = "ref.umap", label = FALSE, group.by = "predicted.celltype", pt.size = 1) + coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+```{r}
+png(filename="./mpab_hlhs_mapped_dimplot_condition.png", width=60, height=20, units="cm", res=600)
+DimPlot(mpab, reduction = "ref.umap", label = FALSE, group.by = "predicted.celltype", pt.size = 1, split.by = "condition") + coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+```{r}
+png(filename="./mpab_hlhs_mapped_barplot.png", width=40, height=20, units="cm", res=600)
+ggplot(mpab@meta.data, aes(x = condition, fill = predicted.celltype)) +
+  geom_bar(position = "fill", width = 0.95) +
+  xlab("Sample") +
+  ylab("Proportion") +
+  theme(legend.title = element_blank())+ coord_fixed(ratio=5)  +
+  theme(legend.text=element_text(size=25)) +
+  scale_fill_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.text=element_text(size=25))+ 
+  theme(axis.text = element_text(size = 25))
+dev.off()
+```
+
+
+#markerlist
+```{r}
+DefaultAssay(mpab) <- 'RNA'
+Idents(mpab) <- "predicted.celltype"
+rna.markers <- FindAllMarkers(mpab, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./humangenes_mpab_markerlist_predictedcelltype.csv", quote = FALSE)
+```
+
+```{r}
+
+```
+
+
+
