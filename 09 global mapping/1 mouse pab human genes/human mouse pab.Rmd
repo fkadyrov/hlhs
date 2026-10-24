@@ -1,0 +1,195 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+```
+
+
+```{r}
+setwd("D:/HLHS/2024 final version/10 global mapping/1 mouse pab human genes/")
+```
+
+
+```{r}
+mpab <- readRDS("D:/HLHS/2024 final version/4 mouse pab clean global object/mousepab_global_cleaned.rds")
+DimPlot(mpab, reduction = "umap", label = TRUE, group.by = "global.type", split.by = "condition")
+```
+
+
+
+```{r}
+exp_mtx <- as.matrix(mpab@assays$SCT@data)
+```
+
+```{r}
+dim(exp_mtx)
+```
+
+```{r}
+mouse <- as.data.frame(row.names(exp_mtx))
+write.table(mouse, file="mousenames.tsv", sep="\t", quote=F, col.names=NA)
+```
+
+#gene names converted with https://biit.cs.ut.ee/gprofiler/orth
+```{r}
+convert <- read.csv2("D:/HLHS/2024 final version/10 global mapping/1 mouse pab human genes/gProfiler_mmusculus_hsapiens_6-24-2024_1-32-10 PM.csv", sep = ",", header = T, quote = "\"")
+
+convert <- convert[!duplicated(convert$g.),]
+
+mouse$human <- convert$ortholog_name
+
+colnames(mouse) <- c("mouse", "human")
+```
+
+```{r}
+dim(exp_mtx)
+```
+
+
+```{r}
+
+leftbehind <- mouse[mouse$human == "N/A",]
+leftbehind <- as.data.frame(leftbehind)
+#genes not converted are largely non coding, but also mhc, zfp, others
+dim(leftbehind)
+```
+
+```{r}
+mouse <- mouse[mouse$human != "N/A",]
+mouse <- mouse[mouse$human != "",]
+dim(mouse)
+```
+
+```{r}
+mouse <- mouse[!duplicated(mouse$mouse),]
+dim(mouse)
+```
+
+```{r}
+mouse <- mouse[!duplicated(mouse$human),]
+dim(mouse)
+```
+
+```{r}
+exp_mtx <-subset(exp_mtx, rownames(exp_mtx) %in% mouse$mouse)
+```
+
+```{r}
+dim(exp_mtx)
+```
+
+
+
+
+```{r}
+exp_mtx <- exp_mtx[ order(row.names(exp_mtx)), ]
+before <- rownames(exp_mtx)
+```
+
+```{r}
+mouse <- mouse[ order(mouse$mouse),]
+```
+
+
+
+```{r}
+
+rownames(exp_mtx) <- mouse$human
+after <- rownames(exp_mtx)
+```
+
+```{r}
+tail(before)
+tail(after)
+```
+
+
+
+
+```{r}
+humangenes_mpab <- CreateSeuratObject(counts = exp_mtx, meta.data = mpab@meta.data )
+```
+
+```{r}
+humangenes_mpab[["umap"]] <- mpab[["umap"]]
+```
+
+```{r}
+a1<- FeaturePlot(mpab, features = "Tnnt2")
+a2<- FeaturePlot(humangenes_mpab, features = "TNNT2")
+
+a3<- FeaturePlot(mpab, features = "Col8a1")
+a4<- FeaturePlot(humangenes_mpab, features = "COL8A1")
+
+a5<- FeaturePlot(mpab, features = "Flt1")
+a6<- FeaturePlot(humangenes_mpab, features = "FLT1")
+
+a7<- FeaturePlot(mpab, features = "Pdgfrb")
+a8<- FeaturePlot(humangenes_mpab, features = "PDGFRB")
+
+a9<- FeaturePlot(mpab, features = "F13a1")
+a10<- FeaturePlot(humangenes_mpab, features = "F13A1")
+
+a11<- FeaturePlot(mpab, features = "Nrg1")
+a12<- FeaturePlot(humangenes_mpab, features = "NRG1")
+
+a13<- FeaturePlot(mpab, features = "Myh11")
+a14<- FeaturePlot(humangenes_mpab, features = "MYH11")
+
+a15<- FeaturePlot(mpab, features = "Slc35f1")
+a16<- FeaturePlot(humangenes_mpab, features = "SLC35F1")
+
+a17<- FeaturePlot(mpab, features = "Ccl21a")
+a18<- FeaturePlot(humangenes_mpab, features = "CCL21")
+
+a19<- FeaturePlot(mpab, features = "Wt1")
+a20<- FeaturePlot(humangenes_mpab, features = "WT1")
+
+a21<- FeaturePlot(mpab, features = "Bank1")
+a22<- FeaturePlot(humangenes_mpab, features = "BANK1")
+
+a23<- FeaturePlot(mpab, features = "Il7r")
+a24<- FeaturePlot(humangenes_mpab, features = "IL7R")
+```
+
+```{r}
+figure <- ggarrange(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24,
+                    ncol = 2, nrow = 12)
+
+png(filename = "./pab mouse to human genes check.png", width = 25, height = 120, units = "cm", res = 300)
+figure
+dev.off()
+
+```
+
+```{r}
+rm(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24)
+gc()
+```
+
+
+
+```{r}
+saveRDS(humangenes_mpab, file = "./humangenes_mpab.rds")
+```
+
+
+
+
+
